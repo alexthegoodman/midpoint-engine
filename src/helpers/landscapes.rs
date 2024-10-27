@@ -1,26 +1,32 @@
+use std::{fs::File, path::PathBuf};
+
+use image::GenericImageView;
+use serde::Serialize;
+use tiff::decoder::{Decoder, DecodingResult};
+
 #[derive(Serialize)]
-struct LandscapeData {
-    width: usize,
-    height: usize,
+pub struct LandscapePixelData {
+    pub width: usize,
+    pub height: usize,
     // data: Vec<u8>,
-    pixel_data: Vec<Vec<PixelData>>,
+    pub pixel_data: Vec<Vec<PixelData>>,
 }
 
 #[derive(Serialize)]
-struct PixelData {
-    height_value: f32,
-    position: [f32; 3],
-    tex_coords: [f32; 2],
+pub struct PixelData {
+    pub height_value: f32,
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
 }
 
 #[derive(Serialize)]
-struct TextureData {
-    bytes: Vec<u8>,
-    width: u32,
-    height: u32,
+pub struct TextureData {
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
 }
 
-fn read_tiff_heightmap(
+pub fn read_tiff_heightmap(
     landscape_path: &str,
     target_width: f32,
     target_length: f32,
@@ -85,16 +91,16 @@ fn read_tiff_heightmap(
     (width, height, pixel_data)
 }
 
-fn get_landscape_pixels(
-    state: tauri::State<'_, AppState>,
+pub fn get_landscape_pixels(
+    // state: tauri::State<'_, AppState>,
     projectId: String,
     landscapeAssetId: String,
     landscapeFilename: String,
-) -> LandscapeData {
-    let handle = &state.handle;
-    let config = handle.config();
-    let package_info = handle.package_info();
-    let env = handle.env();
+) -> LandscapePixelData {
+    // let handle = &state.handle;
+    // let config = handle.config();
+    // let package_info = handle.package_info();
+    // let env = handle.env();
 
     let sync_dir = PathBuf::from("C:/Users/alext/CommonOSFiles");
     let landscapes_dir = sync_dir.join(format!(
@@ -114,7 +120,7 @@ fn get_landscape_pixels(
         250.0,
     );
 
-    LandscapeData {
+    LandscapePixelData {
         width,
         height,
         // data: heightmap.to_vec(),
@@ -122,17 +128,17 @@ fn get_landscape_pixels(
     }
 }
 
-async fn read_landscape_texture(
-    state: tauri::State<'_, AppState>,
+pub async fn read_landscape_texture(
+    // state: tauri::State<'_, AppState>,
     projectId: String,
     landscapeId: String,
     textureFilename: String,
     textureKind: String,
 ) -> Result<TextureData, String> {
-    let handle = &state.handle;
-    let config = handle.config();
-    let package_info = handle.package_info();
-    let env = handle.env();
+    // let handle = &state.handle;
+    // let config = handle.config();
+    // let package_info = handle.package_info();
+    // let env = handle.env();
 
     let sync_dir = PathBuf::from("C:/Users/alext/CommonOSFiles");
     let texture_path = sync_dir.join(format!(
@@ -158,17 +164,17 @@ async fn read_landscape_texture(
     })
 }
 
-async fn read_landscape_mask(
-    state: tauri::State<'_, AppState>,
+pub async fn read_landscape_mask(
+    // state: tauri::State<'_, AppState>,
     projectId: String,
     landscapeId: String,
     maskFilename: String,
     maskKind: String,
 ) -> Result<TextureData, String> {
-    let handle = &state.handle;
-    let config = handle.config();
-    let package_info = handle.package_info();
-    let env = handle.env();
+    // let handle = &state.handle;
+    // let config = handle.config();
+    // let package_info = handle.package_info();
+    // let env = handle.env();
 
     let kind_slug = match maskKind.as_str() {
         "Primary" => "heightmaps",

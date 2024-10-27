@@ -4,10 +4,13 @@ use wgpu::util::DeviceExt;
 use gltf::buffer::{Source, View};
 use gltf::Glb;
 use gltf::Gltf;
+use std::fs::File;
+use std::io::Read;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::renderer::core::Vertex;
-use crate::renderer::Transform::{matrix4_to_raw_array, Transform};
+use crate::core::Transform::{matrix4_to_raw_array, Transform};
+use crate::startup::Vertex;
 
 pub struct Mesh {
     // pub transform: Matrix4<f32>,
@@ -34,7 +37,7 @@ impl Model {
         texture_render_mode_buffer: &wgpu::Buffer,
         color_render_mode_buffer: &wgpu::Buffer,
     ) -> Self {
-        web_sys::console::log_1(&format!("Bytes len: {:?}", bytes.len()).into());
+        // web_sys::console::log_1(&format!("Bytes len: {:?}", bytes.len()).into());
 
         let glb = Glb::from_slice(&bytes).expect("Couldn't create glb from slice");
 
@@ -49,7 +52,7 @@ impl Model {
 
         let uses_textures = gltf.textures().len().gt(&0);
 
-        web_sys::console::log_1(&format!("Textures count: {:?}", gltf.textures().len()).into());
+        // web_sys::console::log_1(&format!("Textures count: {:?}", gltf.textures().len()).into());
 
         let mut textures = Vec::new();
         for texture in gltf.textures() {
@@ -184,8 +187,8 @@ impl Model {
 
                 let indices: Vec<u16> = indices_u32.iter().map(|&i| i as u16).collect();
 
-                web_sys::console::log_1(&format!("Model vertices: {:?}", vertices.len()).into());
-                web_sys::console::log_1(&format!("Model indices: {:?}", indices.len()).into());
+                // web_sys::console::log_1(&format!("Model vertices: {:?}", vertices.len()).into());
+                // web_sys::console::log_1(&format!("Model indices: {:?}", indices.len()).into());
 
                 let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Model GLB Vertex Buffer"),
@@ -299,4 +302,29 @@ impl Model {
 
         Model { meshes }
     }
+}
+
+pub async fn read_model(
+    // state: tauri::State<'_, AppState>,
+    projectId: String,
+    modelFilename: String,
+) -> Result<Vec<u8>, String> {
+    // let handle = &state.handle;
+    // let config = handle.config();
+    // let package_info = handle.package_info();
+    // let env = handle.env();
+
+    let sync_dir = PathBuf::from("C:/Users/alext/CommonOSFiles");
+    let model_path = sync_dir.join(format!(
+        "midpoint/projects/{}/models/{}",
+        projectId, modelFilename
+    ));
+
+    let mut file = File::open(&model_path).map_err(|e| format!("Failed to open model: {}", e))?;
+
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|e| format!("Failed to read model: {}", e))?;
+
+    Ok(bytes)
 }

@@ -2,11 +2,11 @@ use nalgebra::{Matrix4, Vector3};
 use rapier3d::math::Point;
 use wgpu::util::{DeviceExt, TextureDataOrder};
 
-use crate::contexts::saved::LandscapeTextureKinds;
-use crate::renderer::core::LandscapeData;
-use crate::renderer::core::Vertex;
-use crate::renderer::Texture::Texture;
-use crate::renderer::Transform::{matrix4_to_raw_array, Transform};
+use crate::core::Texture::Texture;
+use crate::core::Transform::{matrix4_to_raw_array, Transform};
+use crate::helpers::landscapes::LandscapePixelData;
+use crate::helpers::saved_data::LandscapeTextureKinds;
+use crate::startup::Vertex;
 
 pub struct Landscape {
     pub id: String,
@@ -24,7 +24,7 @@ pub struct Landscape {
 impl Landscape {
     pub fn new(
         landscapeComponentId: &String,
-        data: &LandscapeData,
+        data: &LandscapePixelData,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bind_group_layout: &wgpu::BindGroupLayout,
@@ -255,7 +255,7 @@ impl Landscape {
 
     // Generate vertex buffer from heightmap data
     pub fn generate_terrain(
-        data: &LandscapeData,
+        data: &LandscapePixelData,
         scale: f32,
     ) -> (Vec<Vertex>, Vec<u32>, Vec<Point<f32>>) {
         let mut vertices = Vec::with_capacity(data.width * data.height);

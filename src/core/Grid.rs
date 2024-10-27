@@ -1,8 +1,8 @@
 use nalgebra::{Matrix4, Point3, Vector3};
 use wgpu::util::DeviceExt;
 
-use crate::renderer::core::Vertex;
-use crate::renderer::Transform::matrix4_to_raw_array;
+use crate::core::Transform::matrix4_to_raw_array;
+use crate::startup::Vertex;
 
 pub struct Grid {
     pub vertex_buffer: wgpu::Buffer,

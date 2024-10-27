@@ -1,7 +1,7 @@
 use nalgebra::{Matrix4, Point3, Vector3};
 use wgpu::util::DeviceExt;
 
-use crate::renderer::core::Vertex;
+use crate::startup::Vertex;
 
 pub struct Transform {
     position: Vector3<f32>,

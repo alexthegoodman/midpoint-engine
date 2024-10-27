@@ -1,12 +1,9 @@
-pub mod Grid;
-pub mod Landscape;
-pub mod Model;
-pub mod SimpleCamera;
-pub mod Texture;
-pub mod Transform;
-pub mod Viewport;
 pub mod core;
+pub mod helpers;
+pub mod landscapes;
+pub mod models;
 pub mod shapes;
+pub mod startup;
 
 fn main() {
     println!("Hello, world!");
