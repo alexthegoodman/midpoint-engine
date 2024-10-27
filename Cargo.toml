@@ -1,0 +1,10 @@
+[package]
+name = "midpoint-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[lib]
+name = "midpoint_engine"
+path = "src/lib.rs"
