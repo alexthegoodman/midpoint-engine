@@ -6,5 +6,5 @@ pub mod shapes;
 pub mod startup;
 
 fn main() {
-    println!("Hello, world!");
+    println!("Hello, Midpoint!");
 }

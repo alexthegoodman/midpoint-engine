@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::core::Texture::Texture;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -11,33 +13,68 @@ use crate::{
     shapes::{Cube::Cube, Pyramid::Pyramid},
 };
 
-use super::Grid::Grid;
+use super::{Grid::Grid, Viewport::Viewport};
+
+#[derive(Debug, Clone, Copy)]
+pub struct WindowSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
+}
+
+// Define all possible edit operations
+#[derive(Debug)]
+pub enum ObjectProperty {
+    Width(f32),
+}
+
+#[derive(Debug)]
+pub struct ObjectEditConfig {
+    pub object_id: Uuid,
+    pub field_name: String,
+    pub old_value: ObjectProperty,
+    pub new_value: ObjectProperty,
+    // pub signal: RwSignal<String>,
+}
 
 // #[derive(std::ops::DerefMut)]
 pub struct RendererState {
+    pub viewport: Arc<Mutex<Viewport>>,
     pub cubes: Vec<Cube>,
     pub pyramids: Vec<Pyramid>,
     pub grids: Vec<Grid>,
     pub models: Vec<Model>,
     pub landscapes: Vec<Landscape>,
 
-    pub device: Arc<wgpu::Device>,
-    pub queue: Arc<wgpu::Queue>,
+    // pub device: Arc<wgpu::Device>,
+    // pub queue: Arc<wgpu::Queue>,
     pub model_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     pub texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     pub texture_render_mode_buffer: Arc<wgpu::Buffer>,
     pub color_render_mode_buffer: Arc<wgpu::Buffer>,
+    pub camera_uniform_buffer: Arc<wgpu::Buffer>,
+    pub camera_bind_group: Arc<wgpu::BindGroup>,
 }
 
 // impl<'a> RendererState<'a> {
 impl RendererState {
     pub async fn new(
-        device: Arc<wgpu::Device>,
-        queue: Arc<wgpu::Queue>,
+        // device: Arc<wgpu::Device>,
+        // queue: Arc<wgpu::Queue>,
+        viewport: Arc<Mutex<Viewport>>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         model_bind_group_layout: Arc<wgpu::BindGroupLayout>,
         texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
         texture_render_mode_buffer: Arc<wgpu::Buffer>,
         color_render_mode_buffer: Arc<wgpu::Buffer>,
+        camera_uniform_buffer: Arc<wgpu::Buffer>,
+        camera_bind_group: Arc<wgpu::BindGroup>,
     ) -> Self {
         // create the utility grid(s)
         let mut grids = Vec::new();
@@ -66,20 +103,23 @@ impl RendererState {
             models,
             landscapes,
 
-            device,
-            queue,
+            // device,
+            // queue,
+            viewport,
             model_bind_group_layout,
             texture_bind_group_layout,
             texture_render_mode_buffer,
             color_render_mode_buffer,
+            camera_uniform_buffer,
+            camera_bind_group,
         }
     }
 
-    pub async fn add_model(&mut self, bytes: &Vec<u8>) {
+    pub async fn add_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, bytes: &Vec<u8>) {
         let model = Model::from_glb(
             bytes,
-            &self.device,
-            &self.queue,
+            device,
+            queue,
             &self.model_bind_group_layout,
             &self.texture_bind_group_layout,
             &self.texture_render_mode_buffer,
@@ -90,12 +130,18 @@ impl RendererState {
         self.models.push(model);
     }
 
-    pub fn add_landscape(&mut self, landscapeComponentId: &String, data: &LandscapePixelData) {
+    pub fn add_landscape(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        landscapeComponentId: &String,
+        data: &LandscapePixelData,
+    ) {
         let landscape = Landscape::new(
             landscapeComponentId,
             data,
-            &self.device,
-            &self.queue,
+            device,
+            queue,
             &self.model_bind_group_layout,
             &self.texture_bind_group_layout,
             // &self.texture_render_mode_buffer,
@@ -107,6 +153,8 @@ impl RendererState {
 
     pub fn update_landscape_texture(
         &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         landscape_id: String,
         kind: LandscapeTextureKinds,
         texture: Texture,
@@ -115,8 +163,8 @@ impl RendererState {
     ) {
         if let Some(landscape) = self.landscapes.iter_mut().find(|l| l.id == landscape_id) {
             landscape.update_texture(
-                &self.device,
-                &self.queue,
+                device,
+                queue,
                 &self.texture_bind_group_layout,
                 &self.texture_render_mode_buffer,
                 &self.color_render_mode_buffer,
@@ -124,8 +172,8 @@ impl RendererState {
                 &texture,
             );
             landscape.update_texture(
-                &self.device,
-                &self.queue,
+                device,
+                queue,
                 &self.texture_bind_group_layout,
                 &self.texture_render_mode_buffer,
                 &self.color_render_mode_buffer,
