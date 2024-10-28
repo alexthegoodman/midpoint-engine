@@ -203,30 +203,30 @@ pub fn is_rendering_paused() -> bool {
 
 // mutex approach
 
-// Global mutable static variable for RendererState protected by a Mutex
-pub static mut RENDERER_STATE: Option<Mutex<RendererState>> = None;
+// // Global mutable static variable for RendererState protected by a Mutex
+// pub static mut RENDERER_STATE: Option<Mutex<RendererState>> = None;
 
-thread_local! {
-    pub static RENDERER_STATE_INIT: std::cell::Cell<bool> = std::cell::Cell::new(false);
-}
+// thread_local! {
+//     pub static RENDERER_STATE_INIT: std::cell::Cell<bool> = std::cell::Cell::new(false);
+// }
 
-// Function to initialize the RendererState
-pub fn initialize_renderer_state(state: RendererState) {
-    unsafe {
-        RENDERER_STATE = Some(Mutex::new(state));
-    }
-    RENDERER_STATE_INIT.with(|init| {
-        init.set(true);
-    });
-}
+// // Function to initialize the RendererState
+// pub fn initialize_renderer_state(state: RendererState) {
+//     unsafe {
+//         RENDERER_STATE = Some(Mutex::new(state));
+//     }
+//     RENDERER_STATE_INIT.with(|init| {
+//         init.set(true);
+//     });
+// }
 
-// Function to get a mutable reference to the RendererState
-pub fn get_renderer_state() -> &'static Mutex<RendererState> {
-    RENDERER_STATE_INIT.with(|init| {
-        if !init.get() {
-            panic!("RendererState not initialized");
-        }
-    });
+// // Function to get a mutable reference to the RendererState
+// pub fn get_renderer_state() -> Arc<&'static Mutex<RendererState>> {
+//     RENDERER_STATE_INIT.with(|init| {
+//         if !init.get() {
+//             panic!("RendererState not initialized");
+//         }
+//     });
 
-    unsafe { RENDERER_STATE.as_ref().unwrap() }
-}
+//     unsafe { Arc::new(RENDERER_STATE.as_ref().unwrap()) }
+// }

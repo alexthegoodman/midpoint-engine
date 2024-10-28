@@ -17,16 +17,10 @@ use std::sync::Mutex;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::shapes::Cube::Cube;
+use crate::{core::SimpleCamera::SimpleCamera, helpers::landscapes::read_landscape_texture};
 use crate::{
     core::{Grid::Grid, RendererState::RendererState},
     helpers::landscapes::read_landscape_mask,
-};
-use crate::{
-    core::{
-        RendererState::{get_renderer_state, initialize_renderer_state},
-        SimpleCamera::SimpleCamera,
-    },
-    helpers::landscapes::read_landscape_texture,
 };
 use crate::{
     core::{
@@ -123,14 +117,14 @@ pub fn get_camera() -> &'static mut SimpleCamera {
     unsafe { CAMERA.as_mut().unwrap() }
 }
 
-pub fn handle_key_press(key_code: String, is_pressed: bool) {
+pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
     let camera = get_camera();
-    let state = get_renderer_state();
+    // let state = get_renderer_state();
     let mut state_guard = state.lock().unwrap();
 
     // web_sys::console::log_1(&format!("Key pressed (2): {}", key_code).into());
 
-    match key_code.as_str() {
+    match key_code {
         "w" => {
             if is_pressed {
                 // Handle the key press for W
@@ -209,7 +203,7 @@ pub fn handle_key_press(key_code: String, is_pressed: bool) {
 
 pub fn handle_mouse_move(dx: f32, dy: f32) {
     let camera = get_camera();
-    let sensitivity = 0.005;
+    let sensitivity = 0.0000005;
 
     let dx = -dx * sensitivity;
     let dy = dy * sensitivity;
@@ -220,6 +214,7 @@ pub fn handle_mouse_move(dx: f32, dy: f32) {
 }
 
 pub async fn handle_add_model(
+    state: Arc<Mutex<RendererState>>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     projectId: String,
@@ -227,7 +222,7 @@ pub async fn handle_add_model(
 ) {
     pause_rendering();
 
-    let state = get_renderer_state();
+    // let state = get_renderer_state();
 
     // TODO: this spawn and async may be unncessary
     // spawn(async move {
@@ -276,6 +271,7 @@ pub struct PixelData {
 }
 
 pub async fn handle_add_landscape(
+    state: Arc<Mutex<RendererState>>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     projectId: String,
@@ -286,7 +282,7 @@ pub async fn handle_add_landscape(
 ) {
     pause_rendering();
 
-    let state = get_renderer_state();
+    // let state = get_renderer_state();
 
     // spawn(async move {
     // let params = to_value(&GetLandscapeParams {
@@ -317,6 +313,7 @@ pub async fn handle_add_landscape(
 }
 
 pub async fn handle_add_landscape_texture(
+    state: Arc<Mutex<RendererState>>,
     project_id: String,
     landscape_component_id: String,
     landscape_asset_id: String,
@@ -326,7 +323,7 @@ pub async fn handle_add_landscape_texture(
 ) {
     pause_rendering();
 
-    let state = get_renderer_state();
+    // let state = get_renderer_state();
 
     // Clone the values that need to be moved into the closure
     let landscape_component_id_clone = landscape_component_id.clone();
