@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
+use crate::helpers::utilities::get_common_os_dir;
 use crate::startup::Vertex;
 
 pub struct Mesh {
@@ -28,7 +29,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub async fn from_glb(
+    pub fn from_glb(
         bytes: &Vec<u8>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -304,7 +305,7 @@ impl Model {
     }
 }
 
-pub async fn read_model(
+pub fn read_model(
     // state: tauri::State<'_, AppState>,
     projectId: String,
     modelFilename: String,
@@ -314,7 +315,7 @@ pub async fn read_model(
     // let package_info = handle.package_info();
     // let env = handle.env();
 
-    let sync_dir = PathBuf::from("C:/Users/alext/CommonOSFiles");
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let model_path = sync_dir.join(format!(
         "midpoint/projects/{}/models/{}",
         projectId, modelFilename

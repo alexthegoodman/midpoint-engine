@@ -213,18 +213,20 @@ pub fn handle_mouse_move(dx: f32, dy: f32) {
     camera.update();
 }
 
-pub async fn handle_add_model(
+pub fn handle_add_model(
     state: Arc<Mutex<RendererState>>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    projectId: String,
+    // projectId: String,
     modelFilename: String,
 ) {
     pause_rendering();
 
     // let state = get_renderer_state();
 
-    // TODO: this spawn and async may be unncessary
+    // ideally would spawn because adding model could be expensive
+    // not sure how to pass wgpu items across threads
+
     // spawn(async move {
     // let mut state_guard = get_renderer_state_write_lock();
 
@@ -241,11 +243,16 @@ pub async fn handle_add_model(
     //     .into_serde()
     //     .expect("Failed to transform byte string to value");
 
-    let bytes = read_model(projectId, modelFilename)
-        .await
-        .expect("Couldn't get model bytes");
+    let bytes = read_model(
+        state_guard
+            .project_selected
+            .expect("Couldn't get selected project")
+            .to_string(),
+        modelFilename,
+    )
+    .expect("Couldn't get model bytes");
 
-    state_guard.add_model(device, queue, &bytes).await;
+    state_guard.add_model(device, queue, &bytes);
 
     drop(state_guard);
 

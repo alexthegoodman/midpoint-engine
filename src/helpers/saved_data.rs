@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Default, Debug)]
+#[derive(Hash, Eq, Clone, PartialEq, Serialize, Deserialize, Default, Debug)]
 pub struct File {
     pub id: String,
     pub fileName: String,

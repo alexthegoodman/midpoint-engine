@@ -23,6 +23,7 @@ uuid = { version = "1.8.0", features = ["v4"] }
 gloo-utils = "0.2.0"
 rapier3d = { version = "0.20.0" }
 lazy_static = "1.5.0"
+directories = "5.0.1"
 
 [dependencies.gltf]
 version = "1"

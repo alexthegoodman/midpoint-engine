@@ -59,6 +59,9 @@ pub struct RendererState {
     pub color_render_mode_buffer: Arc<wgpu::Buffer>,
     pub camera_uniform_buffer: Arc<wgpu::Buffer>,
     pub camera_bind_group: Arc<wgpu::BindGroup>,
+
+    pub project_selected: Option<Uuid>,
+    pub current_view: String,
 }
 
 // impl<'a> RendererState<'a> {
@@ -112,10 +115,13 @@ impl RendererState {
             color_render_mode_buffer,
             camera_uniform_buffer,
             camera_bind_group,
+
+            project_selected: None,
+            current_view: "welcome".to_string(),
         }
     }
 
-    pub async fn add_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, bytes: &Vec<u8>) {
+    pub fn add_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, bytes: &Vec<u8>) {
         let model = Model::from_glb(
             bytes,
             device,
@@ -124,8 +130,7 @@ impl RendererState {
             &self.texture_bind_group_layout,
             &self.texture_render_mode_buffer,
             &self.color_render_mode_buffer,
-        )
-        .await;
+        );
 
         self.models.push(model);
     }

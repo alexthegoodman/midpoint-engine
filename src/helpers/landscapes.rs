@@ -4,6 +4,8 @@ use image::GenericImageView;
 use serde::Serialize;
 use tiff::decoder::{Decoder, DecodingResult};
 
+use super::utilities::get_common_os_dir;
+
 #[derive(Serialize)]
 pub struct LandscapePixelData {
     pub width: usize,
@@ -102,7 +104,7 @@ pub fn get_landscape_pixels(
     // let package_info = handle.package_info();
     // let env = handle.env();
 
-    let sync_dir = PathBuf::from("C:/Users/alext/CommonOSFiles");
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let landscapes_dir = sync_dir.join(format!(
         "midpoint/projects/{}/landscapes/{}/heightmaps",
         projectId, landscapeAssetId
@@ -140,7 +142,7 @@ pub async fn read_landscape_texture(
     // let package_info = handle.package_info();
     // let env = handle.env();
 
-    let sync_dir = PathBuf::from("C:/Users/alext/CommonOSFiles");
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let texture_path = sync_dir.join(format!(
         "midpoint/projects/{}/textures/{}",
         projectId, textureFilename
@@ -183,7 +185,7 @@ pub async fn read_landscape_mask(
         _ => "",
     };
 
-    let sync_dir = PathBuf::from("C:/Users/alext/CommonOSFiles");
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let mask_path = sync_dir.join(format!(
         "midpoint/projects/{}/landscapes/{}/{}/{}",
         projectId, landscapeId, kind_slug, maskFilename
