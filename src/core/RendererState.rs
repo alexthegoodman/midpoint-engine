@@ -42,6 +42,13 @@ pub struct ObjectEditConfig {
     // pub signal: RwSignal<String>,
 }
 
+#[derive(Clone, Debug)]
+pub struct ObjectConfig {
+    pub id: Uuid,
+    pub name: String,
+    pub position: (f32, f32, f32),
+}
+
 // #[derive(std::ops::DerefMut)]
 pub struct RendererState {
     pub viewport: Arc<Mutex<Viewport>>,
@@ -62,6 +69,7 @@ pub struct RendererState {
 
     pub project_selected: Option<Uuid>,
     pub current_view: String,
+    pub object_selected: Option<Uuid>,
 }
 
 // impl<'a> RendererState<'a> {
@@ -118,6 +126,7 @@ impl RendererState {
 
             project_selected: None,
             current_view: "welcome".to_string(),
+            object_selected: None,
         }
     }
 

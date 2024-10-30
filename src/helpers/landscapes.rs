@@ -130,7 +130,7 @@ pub fn get_landscape_pixels(
     }
 }
 
-pub async fn read_landscape_texture(
+pub fn read_landscape_texture(
     // state: tauri::State<'_, AppState>,
     projectId: String,
     landscapeId: String,
@@ -166,7 +166,7 @@ pub async fn read_landscape_texture(
     })
 }
 
-pub async fn read_landscape_mask(
+pub fn read_landscape_mask(
     // state: tauri::State<'_, AppState>,
     projectId: String,
     landscapeId: String,

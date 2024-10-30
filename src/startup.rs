@@ -277,7 +277,7 @@ pub struct PixelData {
     pub tex_coords: [f32; 2],
 }
 
-pub async fn handle_add_landscape(
+pub fn handle_add_landscape(
     state: Arc<Mutex<RendererState>>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -319,7 +319,7 @@ pub async fn handle_add_landscape(
     // });
 }
 
-pub async fn handle_add_landscape_texture(
+pub fn handle_add_landscape_texture(
     state: Arc<Mutex<RendererState>>,
     project_id: String,
     landscape_component_id: String,
@@ -344,15 +344,13 @@ pub async fn handle_add_landscape_texture(
         landscape_asset_id.clone(),
         texture_filename,
         texture_kind.clone(),
-    )
-    .await;
+    );
     let mask = fetch_mask_data(
         project_id.clone(),
         landscape_asset_id.clone(),
         mask_filename,
         texture_kind.clone(),
-    )
-    .await;
+    );
 
     // if let Some(texture) = texture {
     let kind = match texture_kind_clone.as_str() {
@@ -394,13 +392,13 @@ pub async fn handle_add_landscape_texture(
 }
 
 #[derive(Deserialize)]
-struct TextureData {
+pub struct TextureData {
     bytes: Vec<u8>,
     width: u32,
     height: u32,
 }
 
-async fn fetch_texture_data(
+pub fn fetch_texture_data(
     project_id: String,
     landscape_id: String,
     texture_filename: String,
@@ -421,14 +419,13 @@ async fn fetch_texture_data(
 
     let texture_data =
         read_landscape_texture(project_id, landscape_id, texture_filename, texture_kind)
-            .await
             .expect("Couldn't get texture data");
 
     // Some((texture_data.data, texture_data.width, texture_data.height))
     Texture::new(texture_data.bytes, texture_data.width, texture_data.height)
 }
 
-async fn fetch_mask_data(
+pub fn fetch_mask_data(
     project_id: String,
     landscape_id: String,
     mask_filename: String,
@@ -443,7 +440,6 @@ async fn fetch_mask_data(
     // .unwrap();
     // let js_data = invoke("read_landscape_mask", params).await;
     let mask_data = read_landscape_mask(project_id, landscape_id, mask_filename, mask_kind)
-        .await
         .expect("Couldn't get mask data");
     // let mask_data: TextureData = js_data
     //     .into_serde()
