@@ -130,8 +130,15 @@ impl RendererState {
         }
     }
 
-    pub fn add_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, bytes: &Vec<u8>) {
+    pub fn add_model(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        model_component_id: &String,
+        bytes: &Vec<u8>,
+    ) {
         let model = Model::from_glb(
+            model_component_id,
             bytes,
             device,
             queue,

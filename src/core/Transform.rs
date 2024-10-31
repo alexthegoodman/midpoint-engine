@@ -4,10 +4,10 @@ use wgpu::util::DeviceExt;
 use crate::handlers::Vertex;
 
 pub struct Transform {
-    position: Vector3<f32>,
-    rotation: Vector3<f32>,
-    scale: Vector3<f32>,
-    uniform_buffer: wgpu::Buffer,
+    pub position: Vector3<f32>,
+    pub rotation: Vector3<f32>,
+    pub scale: Vector3<f32>,
+    pub uniform_buffer: wgpu::Buffer,
 }
 
 impl Transform {
@@ -39,6 +39,14 @@ impl Transform {
         let transform_matrix = transform_matrix.transpose(); // Transpose to match wgpu layout
         let raw_matrix = matrix4_to_raw_array(&transform_matrix);
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&raw_matrix));
+    }
+
+    pub fn update_position(&mut self, position: [f32; 3]) {
+        self.position = Vector3::new(
+            position.get(0).expect("pos x").to_owned(),
+            position.get(1).expect("pos y").to_owned(),
+            position.get(2).expect("pos z").to_owned(),
+        );
     }
 
     pub fn translate(&mut self, translation: Vector3<f32>) {

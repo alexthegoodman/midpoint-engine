@@ -107,7 +107,7 @@ pub fn get_camera() -> &'static mut SimpleCamera {
                     Vector3::new(0.0, 1.0, 0.0),
                     45.0f32.to_radians(),
                     0.1,
-                    10000.0,
+                    100000.0,
                 ));
             }
             init.set(true);
@@ -165,11 +165,11 @@ pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pre
                 // test scale
                 // state.pyramids[0].scale(Vector3::new(1.1, 1.1, 1.1));
 
-                if state_guard.models.len() > 0 {
-                    state_guard.models[0].meshes[0]
-                        .transform
-                        .translate(Vector3::new(0.0, 0.1, 0.0));
-                }
+                // if state_guard.models.len() > 0 {
+                //     state_guard.models[0].meshes[0]
+                //         .transform
+                //         .translate(Vector3::new(0.0, 0.1, 0.0));
+                // }
             }
         }
         "ArrowDown" => {
@@ -217,7 +217,9 @@ pub fn handle_add_model(
     state: Arc<Mutex<RendererState>>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    // projectId: String,
+    projectId: String,
+    landscapeAssetId: String,
+    landscapeComponentId: String,
     modelFilename: String,
 ) {
     pause_rendering();
@@ -252,7 +254,7 @@ pub fn handle_add_model(
     )
     .expect("Couldn't get model bytes");
 
-    state_guard.add_model(device, queue, &bytes);
+    state_guard.add_model(device, queue, &landscapeComponentId, &bytes);
 
     drop(state_guard);
 

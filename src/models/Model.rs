@@ -24,12 +24,14 @@ pub struct Mesh {
 }
 
 pub struct Model {
+    pub id: String,
     pub meshes: Vec<Mesh>,
     // pub transform: Transform,
 }
 
 impl Model {
     pub fn from_glb(
+        model_component_id: &String,
         bytes: &Vec<u8>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -301,7 +303,10 @@ impl Model {
             }
         }
 
-        Model { meshes }
+        Model {
+            id: model_component_id.to_string(),
+            meshes,
+        }
     }
 }
 
