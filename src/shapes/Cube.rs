@@ -2,7 +2,7 @@ use nalgebra::{Matrix4, Point3, Vector3};
 use wgpu::util::DeviceExt;
 
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
-use crate::startup::Vertex;
+use crate::handlers::Vertex;
 
 // Vertices for a cube
 const VERTICES: &[Vertex] = &[

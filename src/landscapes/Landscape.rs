@@ -4,9 +4,9 @@ use wgpu::util::{DeviceExt, TextureDataOrder};
 
 use crate::core::Texture::Texture;
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
+use crate::handlers::Vertex;
 use crate::helpers::landscapes::LandscapePixelData;
 use crate::helpers::saved_data::LandscapeTextureKinds;
-use crate::startup::Vertex;
 
 pub struct Landscape {
     pub id: String,

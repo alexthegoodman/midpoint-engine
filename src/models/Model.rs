@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
+use crate::handlers::Vertex;
 use crate::helpers::utilities::get_common_os_dir;
-use crate::startup::Vertex;
 
 pub struct Mesh {
     // pub transform: Matrix4<f32>,
