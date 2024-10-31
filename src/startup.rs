@@ -203,7 +203,7 @@ pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pre
 
 pub fn handle_mouse_move(dx: f32, dy: f32) {
     let camera = get_camera();
-    let sensitivity = 0.0000005;
+    let sensitivity = 0.005;
 
     let dx = -dx * sensitivity;
     let dy = dy * sensitivity;
@@ -321,6 +321,8 @@ pub fn handle_add_landscape(
 
 pub fn handle_add_landscape_texture(
     state: Arc<Mutex<RendererState>>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
     project_id: String,
     landscape_component_id: String,
     landscape_asset_id: String,
@@ -377,13 +379,15 @@ pub fn handle_add_landscape_texture(
         }
     };
 
-    // state_guard.update_landscape_texture(
-    //     landscape_component_id_clone,
-    //     kind,
-    //     texture,
-    //     maskKind,
-    //     mask,
-    // );
+    state_guard.update_landscape_texture(
+        device,
+        queue,
+        landscape_component_id_clone,
+        kind,
+        texture,
+        maskKind,
+        mask,
+    );
 
     // drop(state_guard);
 

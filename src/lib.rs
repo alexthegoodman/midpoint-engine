@@ -4,3 +4,7 @@ pub mod landscapes;
 pub mod models;
 pub mod shapes;
 pub mod startup;
+
+pub use floem; // This re-exports the whole crate under the name 'floem'
+pub use floem_renderer;
+pub use floem_winit;
