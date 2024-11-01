@@ -4,7 +4,11 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::core::RendererState::{Point, RendererState, WindowSize};
 use crate::core::Viewport::Viewport;
-use crate::handlers::{get_camera, Vertex}; // valid?
+use crate::handlers::{
+    get_camera, handle_add_landscape, handle_add_landscape_texture, handle_add_model, Vertex,
+};
+use crate::helpers::saved_data::{ComponentKind, SavedState};
+use crate::helpers::utilities::load_project_state; // valid?
 use bytemuck::Contiguous;
 // use cgmath::Vector4;
 // use editor_state::{EditorState, ObjectEdit, StateHelper, UIMessage};
@@ -52,6 +56,7 @@ pub fn get_engine_editor(handle: &WindowHandle) -> Option<Arc<Mutex<RendererStat
 }
 
 fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
+    println!("Create Render Callback");
     Box::new(
         move |mut encoder: wgpu::CommandEncoder,
               frame: wgpu::SurfaceTexture,
@@ -74,7 +79,7 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
                 .unwrap();
 
             if let Some(gpu_resources) = &handle.gpu_resources {
-                if engine.current_view == "scene".to_string() {
+                {
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -122,17 +127,17 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
 
                     // Render partial screen content
                     // render_pass.set_viewport(100.0, 100.0, 200.0, 200.0, 0.0, 1.0);
-                    render_pass.set_scissor_rect(
-                        400,
-                        0,
-                        window_handle
-                            .window_width
-                            .expect("Couldn't get window width")
-                            - 400,
-                        window_handle
-                            .window_height
-                            .expect("Couldn't get window height"),
-                    );
+                    // render_pass.set_scissor_rect(
+                    //     400,
+                    //     0,
+                    //     window_handle
+                    //         .window_width
+                    //         .expect("Couldn't get window width")
+                    //         - 400,
+                    //     window_handle
+                    //         .window_height
+                    //         .expect("Couldn't get window height"),
+                    // );
 
                     render_pass.set_pipeline(
                         &handle
@@ -159,47 +164,22 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
                         bytemuck::cast_slice(camera_matrix.as_slice()),
                     );
 
-                    // draw utility grids
-                    for grid in &engine.grids {
-                        render_pass.set_bind_group(0, &engine.camera_bind_group, &[]);
-                        render_pass.set_bind_group(1, &grid.bind_group, &[]);
-                        render_pass.set_bind_group(2, &grid.texture_bind_group, &[]);
+                    // draw cubes
+                    // for cube in &engine.cubes {
+                    //     cube.transform.update_uniform_buffer(&gpu_resources.queue);
+                    //     render_pass.set_bind_group(0, &engine.camera_bind_group, &[]);
+                    //     render_pass.set_bind_group(1, &cube.bind_group, &[]);
 
-                        render_pass.set_vertex_buffer(0, grid.vertex_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            grid.index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint16,
-                        );
+                    //     render_pass.set_vertex_buffer(0, cube.vertex_buffer.slice(..));
+                    //     render_pass.set_index_buffer(
+                    //         cube.index_buffer.slice(..),
+                    //         wgpu::IndexFormat::Uint16,
+                    //     );
 
-                        render_pass.draw_indexed(0..grid.index_count, 0, 0..1);
-                    }
-
-                    // // draw pyramids
-                    // for pyramid in &state.pyramids {
-                    //     pyramid.update_uniform_buffer(&queue);
-                    //     render_pass.set_bind_group(0, &camera_bind_group, &[]);
-                    //     render_pass.set_bind_group(1, &pyramid.bind_group, &[]);
-
-                    //     render_pass.set_vertex_buffer(0, pyramid.vertex_buffer.slice(..));
-                    //     render_pass.set_index_buffer(pyramid.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-
-                    //     render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
+                    //     render_pass.draw_indexed(0..cube.index_count as u32, 0, 0..1);
                     // }
 
-                    // draw cubes
-                    for cube in &engine.cubes {
-                        cube.transform.update_uniform_buffer(&gpu_resources.queue);
-                        render_pass.set_bind_group(0, &engine.camera_bind_group, &[]);
-                        render_pass.set_bind_group(1, &cube.bind_group, &[]);
-
-                        render_pass.set_vertex_buffer(0, cube.vertex_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            cube.index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint16,
-                        );
-
-                        render_pass.draw_indexed(0..cube.index_count as u32, 0, 0..1);
-                    }
+                    // println!("Render frame. Models: {:?}", engine.models.len());
 
                     for model in &engine.models {
                         for mesh in &model.meshes {
@@ -430,7 +410,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 // Define the function type that creates a view
-pub async fn start<F, V>(app_view: F)
+pub async fn start<F, V>(app_view: F, project_id: String)
 where
     F: Fn(Arc<Mutex<GpuHelper>>, Arc<Mutex<Viewport>>) -> V + 'static,
     V: IntoView + 'static,
@@ -453,12 +433,9 @@ where
     let mut gpu_helper = Arc::new(Mutex::new(GpuHelper::new()));
     // let mut state_helper = Arc::new(Mutex::new(StateHelper::new(auth_token)));
 
-    // let state_2 = Arc::clone(&state_helper);
-    // let state_3 = Arc::clone(&state_helper);
-    // let state_4 = Arc::clone(&state_helper);
-
     let gpu_cloned = Arc::clone(&gpu_helper);
     let gpu_cloned2 = Arc::clone(&gpu_helper);
+    let gpu_cloned3 = Arc::clone(&gpu_helper);
 
     let viewport = Arc::new(Mutex::new(Viewport::new(
         window_size.width as f32,
@@ -468,35 +445,6 @@ where
     let viewport_2 = Arc::clone(&viewport);
     let viewport_3 = Arc::clone(&viewport);
     let viewport_4 = Arc::clone(&viewport);
-
-    // let record: Arc<Mutex<Record<ObjectEdit>>> = Arc::new(Mutex::new(Record::new()));
-
-    // let record_2 = Arc::clone(&record);
-
-    // let mut manager = WebSocketManager::new();
-
-    // if let Err(e) = manager
-    //     .connect(state_3, {
-    //         let state_helper = state_4.clone();
-
-    //         move |signals_category, signal_name, signal_value| {
-    //             // main thread!? no.
-    //             println!(
-    //                 "Handling WebSocket message: {} {}",
-    //                 signals_category, signal_name
-    //             );
-    //         }
-    //     })
-    //     .await
-    // {
-    //     eprintln!("Failed to connect: {:?}", e);
-    //     // return;
-    // }
-
-    // let manager = Arc::new(manager);
-
-    // // Disconnect when done
-    // manager.disconnect();
 
     let (mut app, window_id) = app.window(
         move |_| {
@@ -538,8 +486,6 @@ where
 
         println!("Ready...");
 
-        // window_handle.user_editor = Some(cloned); // set engine after pipeline setup
-
         // Receive and store GPU resources
         // match &mut window_handle.paint_state {
         //     PaintState::PendingGpuResources { rx, .. } =>
@@ -548,12 +494,6 @@ where
                 let gpu_resources = Arc::new(rx.recv().unwrap().unwrap());
 
                 println!("Initializing pipeline...");
-
-                // let camera = Camera::new(window_size);
-                // let camera_binding = CameraBinding::new(&gpu_resources.device);
-
-                // editor.camera = Some(camera);
-                // editor.camera_binding = Some(camera_binding);
 
                 let camera = get_camera();
 
@@ -873,16 +813,19 @@ where
                 let renderer_state_2 = Arc::clone(&renderer_state);
                 let renderer_state_3 = Arc::clone(&renderer_state);
 
-                // initialize_renderer_state(state);
+                // do before restore
+                let mut temp_lock = gpu_cloned2.lock().unwrap();
+                temp_lock.gpu_resources = Some(Arc::clone(&gpu_resources));
+                drop(temp_lock);
 
-                // let mut state_helper = state_2.lock().unwrap();
+                // load level data into renderer_state
+                // load the saved_state then restore_renderer_from_saved()
+                let saved_state = Arc::new(Mutex::new(
+                    load_project_state(&project_id).expect("Couldn't load saved Midpoint state"),
+                ));
 
-                // state_helper.renderer_state = Some(renderer_state_3);
+                restore_renderer_from_saved(gpu_cloned3, project_id, saved_state, renderer_state_3);
 
-                // let editor_state = Arc::new(Mutex::new(EditorState::new(renderer_state, record)));
-
-                // window_handle.user_engine = Some(renderer_state_2);
-                // window_handle.set_editor(renderer_state_2);
                 window_handle.user_editor = Some(Box::new(renderer_state_2));
 
                 window_handle.handle_cursor_moved = handle_cursor_moved(
@@ -919,11 +862,11 @@ where
 
                 // editor.update_camera_binding(&gpu_resources.queue);
 
-                gpu_cloned2.lock().unwrap().gpu_resources = Some(Arc::clone(&gpu_resources));
                 // editor.gpu_resources = Some(Arc::clone(&gpu_resources));
                 window_handle.gpu_resources = Some(gpu_resources);
                 window_handle.gpu_helper = Some(gpu_cloned);
                 // editor.window = window_handle.window.clone();
+                println!("Done with setup!");
             }
             .await;
         }
@@ -934,4 +877,186 @@ where
     }
 
     app.run();
+}
+
+pub fn restore_renderer_from_saved(
+    gpu_helper: Arc<Mutex<GpuHelper>>,
+    project_id: String,
+    saved_state: Arc<Mutex<SavedState>>,
+    renderer_state: Arc<Mutex<RendererState>>,
+) {
+    let gpu_helper = gpu_helper.lock().unwrap();
+    let gpu_resources = gpu_helper
+        .gpu_resources
+        .as_ref()
+        .expect("Couldn't get gpu resources");
+    let cloned_saved_2 = saved_state.clone();
+    let saved_state = cloned_saved_2.as_ref().lock().unwrap();
+    let cloned_saved = saved_state.clone();
+    let components = cloned_saved
+        .levels
+        .as_ref()
+        .expect("Couldn't get levels")
+        .get(0)
+        .as_ref()
+        .expect("Couldn't get first level")
+        .components
+        .as_ref()
+        .expect("Couldn't get components");
+
+    // let project_id = self
+    //     .project_selected_signal
+    //     .expect("Couldn't get project signal")
+    //     .get();
+
+    components.iter().for_each(move |component| {
+        // let saved_state = saved_state.clone();
+        if *component.kind.as_ref().expect("Couldn't get kind") == ComponentKind::Landscape {
+            let landscape_asset = saved_state
+                .landscapes
+                .as_ref()
+                .expect("Couldn't get landscapes")
+                .iter()
+                .find(|l| l.id == component.asset_id)
+                .expect("Couldn't find landscape asset");
+
+            handle_add_landscape(
+                renderer_state.clone(),
+                &gpu_resources.device,
+                &gpu_resources.queue,
+                project_id.to_string(),
+                component.asset_id.clone(),
+                component.id.clone(),
+                landscape_asset
+                    .heightmap
+                    .as_ref()
+                    .expect("Couldn't get heightmao")
+                    .fileName
+                    .clone(),
+            );
+
+            println!("onward...");
+
+            // restore generic properties like position
+            let mut renderer_state_guard = renderer_state.lock().unwrap();
+
+            let mut renderer_landscape = renderer_state_guard
+                .landscapes
+                .iter_mut()
+                .find(|l| l.id == component.id.clone())
+                .expect("Couldn't get Renderer Landscape");
+            let position = component.generic_properties.position;
+
+            renderer_landscape.transform.update_position(position);
+
+            drop(renderer_state_guard);
+
+            // restore landscape specific properties
+            let landscape_properties = component
+                .landscape_properties
+                .as_ref()
+                .expect("Couldn't get properties");
+
+            if landscape_properties.rockmap_texture_id.is_some() {
+                let texture_asset = saved_state
+                    .textures
+                    .as_ref()
+                    .expect("Couldn't get landscapes")
+                    .iter()
+                    .find(|t| {
+                        t.id == *landscape_properties
+                            .rockmap_texture_id
+                            .as_ref()
+                            .expect("Couldn't get rockmap id")
+                    })
+                    .expect("Couldn't find landscape asset");
+
+                handle_add_landscape_texture(
+                    renderer_state.clone(),
+                    &gpu_resources.device,
+                    &gpu_resources.queue,
+                    project_id.to_string(),
+                    component.id.clone(),
+                    component.asset_id.clone(),
+                    texture_asset.fileName.clone(),
+                    "Rockmap".to_string(),
+                    landscape_asset
+                        .rockmap
+                        .as_ref()
+                        .expect("No rockmap?")
+                        .fileName
+                        .clone(),
+                );
+            }
+            if landscape_properties.soil_texture_id.is_some() {
+                let texture_asset = saved_state
+                    .textures
+                    .as_ref()
+                    .expect("Couldn't get landscapes")
+                    .iter()
+                    .find(|t| {
+                        t.id == *landscape_properties
+                            .soil_texture_id
+                            .as_ref()
+                            .expect("Couldn't get soil id")
+                    })
+                    .expect("Couldn't find landscape asset");
+
+                handle_add_landscape_texture(
+                    renderer_state.clone(),
+                    &gpu_resources.device,
+                    &gpu_resources.queue,
+                    project_id.to_string(),
+                    component.id.clone(),
+                    component.asset_id.clone(),
+                    texture_asset.fileName.clone(),
+                    "Soil".to_string(),
+                    landscape_asset
+                        .soil
+                        .as_ref()
+                        .expect("No soil?")
+                        .fileName
+                        .clone(),
+                );
+            }
+        } else if *component.kind.as_ref().expect("Couldn't get kind") == ComponentKind::Model {
+            let model_asset = saved_state
+                .models
+                .iter()
+                .find(|m| m.id == component.asset_id)
+                .expect("Couldn't find model asset");
+
+            println!("Adding model...");
+
+            handle_add_model(
+                renderer_state.clone(),
+                &gpu_resources.device,
+                &gpu_resources.queue,
+                project_id.to_string(),
+                model_asset.id.clone(),
+                component.id.clone(),
+                model_asset.fileName.clone(),
+            );
+
+            println!("Model Added!");
+
+            // restore generic properties like position
+            let mut renderer_state = renderer_state.lock().unwrap();
+
+            let mut renderer_model = renderer_state
+                .models
+                .iter_mut()
+                .find(|m| m.id == component.id.clone())
+                .expect("Couldn't get Renderer Model");
+            let position = component.generic_properties.position;
+
+            renderer_model.meshes.iter_mut().for_each(move |mesh| {
+                mesh.transform.update_position(position);
+            });
+
+            drop(renderer_state);
+
+            println!("Finished restoring!");
+        }
+    });
 }

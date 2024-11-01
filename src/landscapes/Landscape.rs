@@ -1,5 +1,6 @@
 use nalgebra::{Matrix4, Vector3};
-use rapier3d::math::Point;
+use rapier3d::math::{Point, Vector};
+use rapier3d::prelude::{Collider, ColliderBuilder, RigidBody, RigidBodyBuilder};
 use wgpu::util::{DeviceExt, TextureDataOrder};
 
 use crate::core::Texture::Texture;
@@ -19,6 +20,7 @@ pub struct Landscape {
     pub texture_array: Option<wgpu::Texture>,
     pub texture_array_view: Option<wgpu::TextureView>,
     pub texture_bind_group: Option<wgpu::BindGroup>,
+    pub rapier_heightfield: Collider,
 }
 
 impl Landscape {
@@ -33,7 +35,17 @@ impl Landscape {
     ) -> Self {
         // load actual vertices and indices (most important for now)
         let scale = 1.0;
-        let (vertices, indices, rapier_vertices) = Self::generate_terrain(data, scale);
+        let (vertices, indices) = Self::generate_terrain(data, scale);
+
+        // Create the scale vector - this determines the size of each cell in the heightfield
+        let scale = Vector::new(
+            2048.0 / (data.width - 1) as f32,  // x scale (width between columns)
+            250.0, // TODO aligh with input height on terrain                       // y scale (height scaling)
+            2048.0 / (data.height - 1) as f32, // z scale (width between rows)
+        );
+
+        let terrain_collider =
+            ColliderBuilder::heightfield(data.rapier_heights.clone(), scale).build();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Landscape Vertex Buffer"),
@@ -137,6 +149,7 @@ impl Landscape {
             texture_array: None,
             texture_array_view: None,
             texture_bind_group: None,
+            rapier_heightfield: terrain_collider,
         }
     }
 
@@ -254,12 +267,9 @@ impl Landscape {
     }
 
     // Generate vertex buffer from heightmap data
-    pub fn generate_terrain(
-        data: &LandscapePixelData,
-        scale: f32,
-    ) -> (Vec<Vertex>, Vec<u32>, Vec<Point<f32>>) {
+    pub fn generate_terrain(data: &LandscapePixelData, scale: f32) -> (Vec<Vertex>, Vec<u32>) {
         let mut vertices = Vec::with_capacity(data.width * data.height);
-        let mut rapier_vertices = Vec::with_capacity(data.width * data.height);
+        // let mut rapier_vertices = Vec::with_capacity(data.width * data.height);
         let mut indices = Vec::new();
 
         for y in 0..data.height {
@@ -270,31 +280,13 @@ impl Landscape {
                     tex_coords: data.pixel_data[y][x].tex_coords,
                     color: [1.0, 1.0, 1.0],
                 });
-                rapier_vertices.push(Point::new(
-                    data.pixel_data[y][x].position[0],
-                    data.pixel_data[y][x].position[1],
-                    data.pixel_data[y][x].position[2],
-                ));
+                // rapier_vertices.push(Point::new(
+                //     data.pixel_data[y][x].position[0],
+                //     data.pixel_data[y][x].position[1],
+                //     data.pixel_data[y][x].position[2],
+                // ));
             }
         }
-
-        // for y in 0..(data.height - 1) {
-        //     for x in 0..(data.width - 1) {
-        //         let top_left = (y * data.width + x) as u32;
-        //         let top_right = top_left + 1;
-        //         let bottom_left = top_left + data.width as u32;
-        //         let bottom_right = bottom_left + 1;
-
-        //         // like everdaygui
-        //         indices.push(top_left);
-        //         indices.push(top_right);
-        //         indices.push(bottom_right);
-
-        //         indices.push(bottom_right);
-        //         indices.push(bottom_left);
-        //         indices.push(top_left);
-        //     }
-        // }
 
         // Generate indices with additional connections
         for y in 0..(data.height - 1) {
@@ -331,6 +323,25 @@ impl Landscape {
             }
         }
 
-        (vertices, indices, rapier_vertices)
+        // println!("Generating terrain colliders...");
+
+        // // Create a static rigid body which doesn't move
+        // let terrain_body = RigidBodyBuilder::fixed() // fixed means immovable
+        //     .build();
+
+        // println!("Body built...");
+
+        // let terrain_collider = ColliderBuilder::trimesh(
+        //     rapier_vertices,
+        //     indices
+        //         .chunks(3)
+        //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+        //         .collect::<Vec<[u32; 3]>>(),
+        // )
+        // .build();
+
+        println!("Terrain ready!");
+
+        (vertices, indices)
     }
 }

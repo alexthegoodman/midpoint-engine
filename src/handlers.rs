@@ -245,14 +245,7 @@ pub fn handle_add_model(
     //     .into_serde()
     //     .expect("Failed to transform byte string to value");
 
-    let bytes = read_model(
-        state_guard
-            .project_selected
-            .expect("Couldn't get selected project")
-            .to_string(),
-        modelFilename,
-    )
-    .expect("Couldn't get model bytes");
+    let bytes = read_model(projectId, modelFilename).expect("Couldn't get model bytes");
 
     state_guard.add_model(device, queue, &landscapeComponentId, &bytes);
 
