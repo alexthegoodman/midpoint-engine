@@ -1,6 +1,11 @@
-use nalgebra::{self as na, Matrix4, Vector3};
+use nalgebra::{self as na, vector, Matrix4, Vector3};
+use rapier3d::{
+    math::Point,
+    prelude::{Collider, ColliderBuilder, ColliderHandle, ColliderSet},
+};
 use std::{f32::consts::PI, sync::Arc};
-use wgpu::util::DeviceExt;
+use uuid::Uuid;
+use wgpu::{core::device, util::DeviceExt};
 
 use crate::handlers::Vertex;
 
@@ -12,11 +17,12 @@ use super::{
 
 // #[derive(Debug)]
 pub struct SimpleGizmo {
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
+    // pub vertex_buffer: wgpu::Buffer,
+    // pub index_buffer: wgpu::Buffer,
+    pub arrows: [AxisArrow; 3],
     pub bind_group: wgpu::BindGroup,
     pub texture_bind_group: wgpu::BindGroup,
-    pub num_indices: u32,
+    // pub num_indices: u32,
     // position: na::Vector3<f32>,
     // rotation: na::UnitQuaternion<f32>,
     // scale: na::Vector3<f32>,
@@ -33,19 +39,10 @@ impl SimpleGizmo {
         texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     ) -> Self {
         // Generate a basic gizmo shape (like arrows for each axis)
-        let (vertices, indices) = Self::create_gizmo_geometry();
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Gizmo Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Gizmo Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        // let (vertices, indices) = Self::create_gizmo_geometry();
+        let arrow_x = AxisArrow::new(device, 0);
+        let arrow_y = AxisArrow::new(device, 1);
+        let arrow_z = AxisArrow::new(device, 2);
 
         // set uniform buffer for transforms
         let empty_buffer = Matrix4::<f32>::identity();
@@ -121,11 +118,9 @@ impl SimpleGizmo {
         });
 
         Self {
-            vertex_buffer,
-            index_buffer,
+            arrows: [arrow_x, arrow_y, arrow_z],
             bind_group,
             texture_bind_group,
-            num_indices: indices.len() as u32,
             transform: Transform::new(
                 Vector3::new(2.0, 2.0, 2.0),
                 Vector3::new(0.0, 0.0, 0.0),
@@ -135,19 +130,57 @@ impl SimpleGizmo {
         }
     }
 
-    fn create_gizmo_geometry() -> (Vec<Vertex>, Vec<u32>) {
+    // pub fn update_arrow_collider_position(&mut self, position: [f32; 3]) {
+    //     self.arrows.iter_mut().for_each(|arrow| {
+    //         let isometry = nalgebra::Isometry3::new(
+    //             vector![position[0], position[1], position[2]],
+    //             vector![0.0, 0.0, 0.0],
+    //         );
+    //         println!("Updating collider position");
+    //         arrow.rapier_collider.set_position(isometry);
+    //     });
+    // }
+
+    // fn create_gizmo_geometry() -> (Vec<Vertex>, Vec<u32>) {
+    //     let mut vertices = Vec::new();
+    //     let mut indices = Vec::new();
+
+    //     // Create arrow shapes for each axis
+    //     Self::add_axis_arrow(&mut vertices, &mut indices, 0); // X axis (red)
+    //     Self::add_axis_arrow(&mut vertices, &mut indices, 1); // Y axis (green)
+    //     Self::add_axis_arrow(&mut vertices, &mut indices, 2); // Z axis (blue)
+
+    //     (vertices, indices)
+    // }
+
+    // fn add_axis_arrow(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, axis: u8) {
+
+    // }
+
+    pub fn update(&mut self, camera: &SimpleCamera, mouse_state: &MouseState) {
+        // Add interaction logic here
+        // For example, handle dragging, rotation, etc.
+    }
+}
+
+pub struct AxisArrow {
+    pub id: Uuid,
+    pub axis: u8,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub index_count: u32,
+    pub rapier_collider: Collider,
+    pub collider_handle: Option<ColliderHandle>,
+}
+
+impl AxisArrow {
+    pub fn new(device: &wgpu::Device, axis: u8) -> Self {
+        let id = Uuid::new_v4();
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
+        let mut vertices_for_collision = Vec::new();
+        let mut indices_for_collision: Vec<[u32; 3]> = Vec::new();
 
-        // Create arrow shapes for each axis
-        Self::add_axis_arrow(&mut vertices, &mut indices, 0); // X axis (red)
-        Self::add_axis_arrow(&mut vertices, &mut indices, 1); // Y axis (green)
-        Self::add_axis_arrow(&mut vertices, &mut indices, 2); // Z axis (blue)
-
-        (vertices, indices)
-    }
-
-    fn add_axis_arrow(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, axis: u8) {
         let base_index = vertices.len() as u32;
         let length = 1.0;
         let radius = 0.02;
@@ -160,59 +193,161 @@ impl SimpleGizmo {
             _ => [0.0, 0.0, 1.0], // Z axis: blue
         };
 
-        // Create arrow shaft
-        let mut position = na::Vector3::zeros();
-        for i in 0..segments {
-            let angle = (i as f32 / segments as f32) * 2.0 * PI;
-            let x = radius * angle.cos();
-            let y = radius * angle.sin();
+        // // Create arrow shaft
+        // let mut position = na::Vector3::zeros();
+        // for i in 0..segments {
+        //     let angle = (i as f32 / segments as f32) * 2.0 * PI;
+        //     let x = radius * angle.cos();
+        //     let y = radius * angle.sin();
 
-            // Transform position based on axis
-            match axis {
-                0 => position = na::Vector3::new(0.0, x, y),
-                1 => position = na::Vector3::new(x, 0.0, y),
-                _ => position = na::Vector3::new(x, y, 0.0),
+        //     // Transform position based on axis
+        //     match axis {
+        //         0 => position = na::Vector3::new(0.0, x, y),
+        //         1 => position = na::Vector3::new(x, 0.0, y),
+        //         _ => position = na::Vector3::new(x, y, 0.0),
+        //     }
+
+        //     vertices.push(Vertex {
+        //         position: [position.x, position.y, position.z],
+        //         normal: [0.0, 0.0, 1.0],
+        //         tex_coords: [0.0, 0.0],
+        //         color,
+        //     });
+
+        //     // Store vertices for collision
+        //     vertices_for_collision.push(Point::new(position.x, position.y, position.z));
+        // }
+
+        // // Create arrow head (cone)
+        // let head_radius = radius * 2.0;
+        // let head_length = length * 0.2;
+        // let head_position = match axis {
+        //     0 => na::Vector3::new(length, 0.0, 0.0),
+        //     1 => na::Vector3::new(0.0, length, 0.0),
+        //     _ => na::Vector3::new(0.0, 0.0, length),
+        // };
+
+        // vertices.push(Vertex {
+        //     position: [head_position.x, head_position.y, head_position.z],
+        //     normal: [0.0, 0.0, 1.0],
+        //     tex_coords: [0.0, 0.0],
+        //     color,
+        //     // Add other vertex attributes as needed
+        // });
+
+        // vertices_for_collision.push(Point::new(
+        //     head_position.x,
+        //     head_position.y,
+        //     head_position.z,
+        // ));
+
+        // // Add indices for the arrow shaft
+        // for i in 0..segments {
+        //     let next = (i + 1) % segments;
+        //     indices.extend_from_slice(&[
+        //         base_index + i as u32,
+        //         base_index + next as u32,
+        //         base_index + segments as u32,
+        //     ]);
+        //     // Collision indices as triangle array
+        //     indices_for_collision.push([i as u32, next as u32, segments as u32]);
+        // }
+
+        // Create shaft vertices at both ends
+        for end in 0..2 {
+            let z = if end == 0 { 0.0 } else { length };
+            for i in 0..segments {
+                let angle = (i as f32 / segments as f32) * std::f32::consts::PI * 2.0;
+                let x = radius * angle.cos();
+                let y = radius * angle.sin();
+
+                // Transform position based on axis
+                let position = match axis {
+                    0 => na::Vector3::new(z, x, y), // X axis
+                    1 => na::Vector3::new(x, z, y), // Y axis
+                    _ => na::Vector3::new(x, y, z), // Z axis
+                };
+
+                vertices.push(Vertex {
+                    position: [position.x, position.y, position.z],
+                    normal: [0.0, 0.0, 1.0],
+                    tex_coords: [0.0, 0.0],
+                    color,
+                });
+
+                vertices_for_collision.push(Point::new(position.x, position.y, position.z));
             }
-
-            vertices.push(Vertex {
-                position: [position.x, position.y, position.z],
-                normal: [0.0, 0.0, 1.0],
-                tex_coords: [0.0, 0.0],
-                color,
-                // Add other vertex attributes as needed
-            });
         }
 
-        // Create arrow head (cone)
-        let head_radius = radius * 2.0;
-        let head_length = length * 0.2;
-        let head_position = match axis {
-            0 => na::Vector3::new(length, 0.0, 0.0),
-            1 => na::Vector3::new(0.0, length, 0.0),
-            _ => na::Vector3::new(0.0, 0.0, length),
-        };
-
-        vertices.push(Vertex {
-            position: [head_position.x, head_position.y, head_position.z],
-            normal: [0.0, 0.0, 1.0],
-            tex_coords: [0.0, 0.0],
-            color,
-            // Add other vertex attributes as needed
-        });
-
-        // Add indices for the arrow shaft
+        // Create indices for the shaft (triangles between the two circular ends)
         for i in 0..segments {
             let next = (i + 1) % segments;
+
+            // First triangle of the quad
+            indices.extend_from_slice(&[i as u32, next as u32, (i + segments) as u32]);
+            indices_for_collision.push([i as u32, next as u32, (i + segments) as u32]);
+
+            // Second triangle of the quad
             indices.extend_from_slice(&[
-                base_index + i as u32,
-                base_index + next as u32,
-                base_index + segments as u32,
+                next as u32,
+                (next + segments) as u32,
+                (i + segments) as u32,
+            ]);
+            indices_for_collision.push([
+                next as u32,
+                (next + segments) as u32,
+                (i + segments) as u32,
             ]);
         }
-    }
 
-    pub fn update(&mut self, camera: &SimpleCamera, mouse_state: &MouseState) {
-        // Add interaction logic here
-        // For example, handle dragging, rotation, etc.
+        // Option 1: Create a capsule collider instead of trimesh
+        // let collider = match axis {
+        //     0 => ColliderBuilder::capsule_x(length / 2.0, radius)
+        //         .user_data(id.as_u128())
+        //         .sensor(true)
+        //         .build(),
+        //     1 => ColliderBuilder::capsule_y(length / 2.0, radius)
+        //         .user_data(id.as_u128())
+        //         .sensor(true)
+        //         .build(),
+        //     _ => ColliderBuilder::capsule_z(length / 2.0, radius)
+        //         .user_data(id.as_u128())
+        //         .sensor(true)
+        //         .build(),
+        // };
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Gizmo Arrow Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Gizmo Arrow Index Buffer"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        // Create trimesh collider
+        // let collider =
+        //     ColliderBuilder::trimesh(vertices_for_collision.clone(), indices_for_collision)
+        //         .user_data(id.as_u128())
+        //         .build();
+
+        let collider = ColliderBuilder::convex_hull(&vertices_for_collision.clone())
+            .expect("Couldn't create convex hull")
+            .sensor(true)
+            .user_data(id.as_u128())
+            .build();
+
+        AxisArrow {
+            id,
+            axis,
+            vertex_buffer,
+            index_buffer,
+            index_count: indices.len() as u32,
+            rapier_collider: collider,
+            collider_handle: None,
+        }
     }
 }

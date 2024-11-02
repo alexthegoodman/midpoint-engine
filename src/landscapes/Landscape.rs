@@ -1,6 +1,6 @@
 use nalgebra::{Matrix4, Vector3};
 use rapier3d::math::{Point, Vector};
-use rapier3d::prelude::{Collider, ColliderBuilder, RigidBody, RigidBodyBuilder};
+use rapier3d::prelude::{Collider, ColliderBuilder, ColliderHandle, RigidBody, RigidBodyBuilder};
 use std::str::FromStr;
 use uuid::Uuid;
 use wgpu::util::{DeviceExt, TextureDataOrder};
@@ -23,6 +23,7 @@ pub struct Landscape {
     pub texture_array_view: Option<wgpu::TextureView>,
     pub texture_bind_group: Option<wgpu::BindGroup>,
     pub rapier_heightfield: Collider,
+    pub collider_handle: Option<ColliderHandle>,
 }
 
 impl Landscape {
@@ -157,6 +158,7 @@ impl Landscape {
             texture_array_view: None,
             texture_bind_group: None,
             rapier_heightfield: terrain_collider,
+            collider_handle: None,
         }
     }
 

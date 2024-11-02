@@ -2,7 +2,6 @@ use std::{fs, path::PathBuf};
 
 use directories::{BaseDirs, UserDirs};
 use nalgebra::Matrix4;
-use transform_gizmo::mint::RowMatrix4;
 
 use super::saved_data::SavedState;
 
@@ -39,16 +38,16 @@ pub fn load_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::e
     Ok(state)
 }
 
-pub fn nalgebra_to_gizmo_matrix(mat: Matrix4<f32>) -> RowMatrix4<f64> {
-    // Convert to f64 and transpose since transform-gizmo expects row-major format
-    let mut result = [[0.0; 4]; 4];
+// pub fn nalgebra_to_gizmo_matrix(mat: Matrix4<f32>) -> RowMatrix4<f64> {
+//     // Convert to f64 and transpose since transform-gizmo expects row-major format
+//     let mut result = [[0.0; 4]; 4];
 
-    for i in 0..4 {
-        for j in 0..4 {
-            // nalgebra is column-major, so we transpose during conversion
-            result[i][j] = mat[(j, i)] as f64;
-        }
-    }
+//     for i in 0..4 {
+//         for j in 0..4 {
+//             // nalgebra is column-major, so we transpose during conversion
+//             result[i][j] = mat[(j, i)] as f64;
+//         }
+//     }
 
-    RowMatrix4::from(result)
-}
+//     RowMatrix4::from(result)
+// }

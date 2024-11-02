@@ -28,7 +28,7 @@ pub fn create_ray_from_mouse(
     // Calculate ray direction
     let direction = (far_point - near_point).normalize();
 
-    println!("casting ray {:?} {:?}", direction, camera.position);
+    // println!("casting ray {:?} {:?}", direction, camera.position);
 
     // Create Rapier ray
     Ray::new(
@@ -64,96 +64,6 @@ pub fn create_ray_debug_mesh(
     device: &wgpu::Device,
 ) -> (wgpu::Buffer, wgpu::Buffer, usize) {
     // Create a thin box along the ray
-    // let half_thickness = thickness / 2.0;
-    // let visible_start = ray.origin + ray.dir * 1.0;
-    // let end_point = ray.origin + ray.dir * length;
-
-    // // 8 vertices of the box
-    // let vertices = [
-    //     // Near face
-    //     Vertex {
-    //         position: [
-    //             visible_start.x - half_thickness,
-    //             visible_start.y - half_thickness,
-    //             visible_start.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 0.0, 0.0], /* other fields */
-    //     },
-    //     Vertex {
-    //         position: [
-    //             visible_start.x + half_thickness,
-    //             visible_start.y - half_thickness,
-    //             visible_start.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 0.0, 0.0], /* other fields */
-    //     },
-    //     Vertex {
-    //         position: [
-    //             visible_start.x + half_thickness,
-    //             visible_start.y + half_thickness,
-    //             visible_start.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 0.0, 0.0], /* other fields */
-    //     },
-    //     Vertex {
-    //         position: [
-    //             visible_start.x - half_thickness,
-    //             visible_start.y + half_thickness,
-    //             visible_start.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 0.0, 0.0], /* other fields */
-    //     },
-    //     // Far face
-    //     Vertex {
-    //         position: [
-    //             end_point.x - half_thickness,
-    //             end_point.y - half_thickness,
-    //             end_point.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 1.0, 0.0], /* other fields */
-    //     },
-    //     Vertex {
-    //         position: [
-    //             end_point.x + half_thickness,
-    //             end_point.y - half_thickness,
-    //             end_point.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 1.0, 0.0], /* other fields */
-    //     },
-    //     Vertex {
-    //         position: [
-    //             end_point.x + half_thickness,
-    //             end_point.y + half_thickness,
-    //             end_point.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 1.0, 0.0], /* other fields */
-    //     },
-    //     Vertex {
-    //         position: [
-    //             end_point.x - half_thickness,
-    //             end_point.y + half_thickness,
-    //             end_point.z,
-    //         ],
-    //         normal: [0.0, 0.0, 1.0],
-    //         tex_coords: [0.0, 0.0],
-    //         color: [1.0, 1.0, 0.0], /* other fields */
-    //     },
-    // ];
-
     let half_thickness = thickness / 2.0;
 
     // Create a rotation matrix to align the box with the ray direction

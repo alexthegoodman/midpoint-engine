@@ -1,4 +1,5 @@
 use floem::keyboard::ModifiersState;
+use rapier3d::math::Point as RapierPoint;
 use rapier3d::prelude::*;
 use rapier3d::prelude::{ColliderSet, QueryPipeline, RigidBodySet};
 use uuid::Uuid;
@@ -19,12 +20,12 @@ use crate::{
     shapes::{Cube::Cube, Pyramid::Pyramid},
 };
 
+use super::SimpleGizmo::AxisArrow;
 use super::{
     Grid::Grid,
     Rays::{cast_ray_at_components, create_ray_from_mouse},
     SimpleCamera::SimpleCamera,
     SimpleGizmo::SimpleGizmo,
-    TestTransformGizmo::TestTransformGizmo,
     Viewport::Viewport,
 };
 
@@ -105,6 +106,9 @@ pub struct RendererState {
     pub current_modifiers: ModifiersState,
     pub mouse_state: MouseState,
     pub last_ray: Option<Ray>,
+    pub ray_intersecting: bool,
+    pub ray_intersection: Option<RapierPoint<f32>>,
+    pub ray_component_id: Option<Uuid>,
 }
 
 // impl<'a> RendererState<'a> {
@@ -208,6 +212,9 @@ impl RendererState {
                 is_dragging: false,
             },
             last_ray: None,
+            ray_intersecting: false,
+            ray_component_id: None,
+            ray_intersection: None,
         }
     }
 
@@ -218,13 +225,11 @@ impl RendererState {
         camera: &SimpleCamera,
         screen_width: u32,
         screen_height: u32,
-        // query_pipeline: &mut QueryPipeline,
-        // rigid_body_set: &RigidBodySet,
-        // collider_set: &ColliderSet,
-        // gizmo: &mut SimpleGizmo,
     ) -> Ray {
         // Create ray from mouse position
         let ray = create_ray_from_mouse(mouse_pos, camera, screen_width, screen_height);
+
+        // println!("collider set {:?}", self.collider_set.len());
 
         // Cast ray and check for intersection
         if let Some((collider_handle, toi)) = cast_ray_at_components(
@@ -233,29 +238,22 @@ impl RendererState {
             &self.rigid_body_set,
             &self.collider_set,
         ) {
-            println!("Colliding!");
+            // println!("Colliding!");
             // Get the collider
             let collider = &self.collider_set[collider_handle];
 
             // Get intersection point in world space
-            // let intersection_point = ray.point_at(intersection.toi);
             let intersection_point = ray.point_at(toi);
 
             let component_id = Uuid::from_u128(collider.user_data);
 
-            // Position the gizmo at intersection point
-            self.gizmo.transform.update_position([
-                intersection_point.x,
-                intersection_point.y,
-                intersection_point.z,
-            ]);
-
-            // // Optionally, you might want to orient the gizmo based on the surface normal
-            // if let Some(normal) = intersection.normal {
-            //     // Create rotation from normal...
-            // }
+            self.ray_intersecting = true;
+            self.ray_intersection = Some(intersection_point);
+            self.ray_component_id = Some(component_id);
         } else {
-            println!("not colliding...");
+            self.ray_intersecting = false;
+            self.ray_intersection = None;
+            self.ray_component_id = None;
         }
 
         ray
@@ -265,29 +263,69 @@ impl RendererState {
         self.query_pipeline.update(&self.collider_set);
     }
 
+    pub fn add_arrow_colliders(&mut self) {
+        self.gizmo.arrows.iter_mut().for_each(|arrow| {
+            println!("adding arrow collider");
+            let collider_handle = self.collider_set.insert(arrow.rapier_collider.clone());
+            arrow.collider_handle = Some(collider_handle);
+        });
+    }
+
+    pub fn update_arrow_collider_position(
+        &mut self,
+        //arrows: &[AxisArrow; 3],
+        position: [f32; 3],
+    ) {
+        self.gizmo.arrows.iter().for_each(|arrow| {
+            // Create translation vector based on the arrow's axis
+            let translation = match arrow.axis {
+                0 => vector![position[0], position[1], position[2]], // X axis
+                1 => vector![position[0], position[1], position[2]], // Y axis
+                _ => vector![position[0], position[1], position[2]], // Z axis
+            };
+
+            let isometry =
+                nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
+
+            if let Some(collider) = self
+                .collider_set
+                .get_mut(arrow.collider_handle.expect("Couldn't get collider handle"))
+            {
+                collider.set_position(isometry);
+                println!(
+                    "Updated collider for axis {}: pos={:?}",
+                    arrow.axis, translation
+                );
+            }
+        });
+    }
+
     pub fn add_collider(&mut self, component_id: String, component_kind: ComponentKind) {
         match component_kind {
             ComponentKind::Landscape => {
                 let renderer_landscape = self
                     .landscapes
-                    .iter()
+                    .iter_mut()
                     .find(|l| l.id == component_id.clone())
                     .expect("Couldn't get Renderer Landscape");
 
                 // TODO: expensive clone?
-                self.collider_set
+                let collider_handle = self
+                    .collider_set
                     .insert(renderer_landscape.rapier_heightfield.clone());
+                renderer_landscape.collider_handle = Some(collider_handle);
             }
             ComponentKind::Model => {
                 let renderer_model = self
                     .models
-                    .iter()
+                    .iter_mut()
                     .find(|l| l.id == component_id.clone())
                     .expect("Couldn't get Renderer Model");
 
-                renderer_model.meshes.iter().for_each(|mesh| {
+                renderer_model.meshes.iter_mut().for_each(|mesh| {
                     // TODO: expensive clone?
-                    self.collider_set.insert(mesh.rapier_collider.clone());
+                    let collider_handle = self.collider_set.insert(mesh.rapier_collider.clone());
+                    mesh.collider_handle = Some(collider_handle);
                 });
             }
         }

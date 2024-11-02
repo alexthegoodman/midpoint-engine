@@ -27,6 +27,7 @@ pub struct Mesh {
     pub bind_group: wgpu::BindGroup,
     pub texture_bind_group: wgpu::BindGroup,
     pub rapier_collider: Collider,
+    pub collider_handle: Option<ColliderHandle>,
 }
 
 pub struct Model {
@@ -323,6 +324,7 @@ impl Model {
                     bind_group,
                     texture_bind_group,
                     rapier_collider,
+                    collider_handle: None,
                 });
             }
         }
