@@ -38,18 +38,22 @@ impl SimpleCamera {
         self.aspect_ratio = aspect_ratio;
     }
 
-    // pub fn build_view_projection_matrix(&self) -> Matrix4<f32> {
-    //     let view = Matrix4::look_at_rh(&self.position, &(self.position + self.direction), &self.up);
-    //     let proj =
-    //         Perspective3::new(self.aspect_ratio, self.fovy, self.znear, self.zfar).to_homogeneous();
-    //     proj * view
-    // }
-
-    pub fn update_view_projection_matrix(&mut self) {
+    pub fn get_view(&self) -> Matrix4<f32> {
         let view_matrix =
             Matrix4::look_at_rh(&self.position, &(self.position + self.direction), &self.up);
+        view_matrix
+    }
+
+    pub fn get_projection(&self) -> Matrix4<f32> {
         let projection_matrix =
             Matrix4::new_perspective(self.aspect_ratio, self.fovy, self.znear, self.zfar);
+        projection_matrix
+    }
+
+    pub fn update_view_projection_matrix(&mut self) {
+        let view_matrix = self.get_view();
+        let projection_matrix = self.get_projection();
+
         self.view_projection_matrix = projection_matrix * view_matrix;
     }
 

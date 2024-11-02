@@ -36,6 +36,8 @@ pub enum LandscapeTextureKinds {
 pub struct GenericProperties {
     pub name: String,
     pub position: [f32; 3],
+    pub rotation: [f32; 3],
+    pub scale: [f32; 3],
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Default, Debug)]

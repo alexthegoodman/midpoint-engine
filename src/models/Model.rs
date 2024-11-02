@@ -1,4 +1,8 @@
 use nalgebra::{Matrix4, Point3, Vector3};
+use rapier3d::math::Point;
+use rapier3d::prelude::ColliderBuilder;
+use rapier3d::prelude::*;
+use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
 use gltf::buffer::{Source, View};
@@ -7,6 +11,7 @@ use gltf::Gltf;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
@@ -21,6 +26,7 @@ pub struct Mesh {
     pub index_count: u32,
     pub bind_group: wgpu::BindGroup,
     pub texture_bind_group: wgpu::BindGroup,
+    pub rapier_collider: Collider,
 }
 
 pub struct Model {
@@ -183,6 +189,13 @@ impl Model {
                     })
                     .collect();
 
+                let rapier_points: Vec<Point<f32>> = vertices
+                    .iter()
+                    .map(|vertex| {
+                        point![vertex.position[0], vertex.position[1], vertex.position[2]]
+                    })
+                    .collect();
+
                 let indices_u32: Vec<u32> = reader
                     .read_indices()
                     .map(|iter| iter.into_u32().collect())
@@ -286,6 +299,16 @@ impl Model {
                     })
                 };
 
+                // rapier physics and collision detection!
+                let rapier_collider = ColliderBuilder::convex_hull(&rapier_points)
+                    .expect("Couldn't create convex hull")
+                    .user_data(
+                        Uuid::from_str(&model_component_id)
+                            .expect("Couldn't extract uuid")
+                            .as_u128(),
+                    )
+                    .build();
+
                 meshes.push(Mesh {
                     // transform: Matrix4::identity(),
                     transform: Transform::new(
@@ -299,6 +322,7 @@ impl Model {
                     index_count: indices.len() as u32,
                     bind_group,
                     texture_bind_group,
+                    rapier_collider,
                 });
             }
         }

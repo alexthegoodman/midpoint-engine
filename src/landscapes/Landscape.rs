@@ -1,6 +1,8 @@
 use nalgebra::{Matrix4, Vector3};
 use rapier3d::math::{Point, Vector};
 use rapier3d::prelude::{Collider, ColliderBuilder, RigidBody, RigidBodyBuilder};
+use std::str::FromStr;
+use uuid::Uuid;
 use wgpu::util::{DeviceExt, TextureDataOrder};
 
 use crate::core::Texture::Texture;
@@ -44,8 +46,13 @@ impl Landscape {
             2048.0 / (data.height - 1) as f32, // z scale (width between rows)
         );
 
-        let terrain_collider =
-            ColliderBuilder::heightfield(data.rapier_heights.clone(), scale).build();
+        let terrain_collider = ColliderBuilder::heightfield(data.rapier_heights.clone(), scale)
+            .user_data(
+                Uuid::from_str(landscapeComponentId)
+                    .expect("Couldn't extract uuid")
+                    .as_u128(),
+            )
+            .build();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Landscape Vertex Buffer"),

@@ -49,6 +49,22 @@ impl Transform {
         );
     }
 
+    pub fn update_rotation(&mut self, rotation: [f32; 3]) {
+        self.rotation = Vector3::new(
+            rotation.get(0).expect("rotation x").to_owned(),
+            rotation.get(1).expect("rotation y").to_owned(),
+            rotation.get(2).expect("rotation z").to_owned(),
+        );
+    }
+
+    pub fn update_scale(&mut self, scale: [f32; 3]) {
+        self.scale = Vector3::new(
+            scale.get(0).expect("scale x").to_owned(),
+            scale.get(1).expect("scale y").to_owned(),
+            scale.get(2).expect("scale z").to_owned(),
+        );
+    }
+
     pub fn translate(&mut self, translation: Vector3<f32>) {
         self.position += translation;
     }

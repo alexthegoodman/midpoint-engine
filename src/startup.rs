@@ -18,6 +18,7 @@ use floem::window::WindowConfig;
 use floem_renderer::gpu_resources::{self, GpuResources};
 use floem_winit::dpi::{LogicalSize, PhysicalSize};
 use floem_winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta};
+use nalgebra::Isometry;
 // use helpers::auth::read_auth_token;
 // use helpers::websocket::{Call, WebSocketManager};
 // use startup::{get_camera, handle_key_press, handle_mouse_move, Vertex};
@@ -26,6 +27,7 @@ use uuid::Uuid;
 // use winit::{event_loop, window};
 use floem::reactive::SignalGet;
 use floem::reactive::SignalUpdate;
+use rapier3d::prelude::*;
 use wgpu::util::DeviceExt;
 
 use floem::context::PaintState;
@@ -570,6 +572,8 @@ where
                     },
                 );
 
+                let camera_bind_group_layout = Arc::new(camera_bind_group_layout);
+
                 let model_bind_group_layout = gpu_resources.device.create_bind_group_layout(
                     &wgpu::BindGroupLayoutDescriptor {
                         entries: &[wgpu::BindGroupLayoutEntry {
@@ -805,6 +809,10 @@ where
                     color_render_mode_buffer.clone(),
                     camera_uniform_buffer.clone(),
                     camera_bind_group.clone(),
+                    &camera,
+                    window_width,
+                    window_height,
+                    camera_bind_group_layout.clone(),
                 )
                 .await;
 
@@ -946,8 +954,26 @@ pub fn restore_renderer_from_saved(
                 .find(|l| l.id == component.id.clone())
                 .expect("Couldn't get Renderer Landscape");
             let position = component.generic_properties.position;
+            let rotation = component.generic_properties.rotation;
 
             renderer_landscape.transform.update_position(position);
+            // including rapier!
+            // Convert euler angles (Vector3) to Quaternion/Isometry
+            let isometry = nalgebra::Isometry3::new(
+                vector![position[0], position[1], position[2]],
+                vector![rotation[0], rotation[1], rotation[2]],
+            );
+
+            renderer_landscape.rapier_heightfield.set_position(isometry);
+
+            drop(renderer_state_guard);
+
+            let mut renderer_state_guard = renderer_state.lock().unwrap();
+
+            renderer_state_guard.add_collider(
+                component.id.clone(),
+                component.kind.as_ref().expect("kind").clone(),
+            );
 
             drop(renderer_state_guard);
 
@@ -1049,10 +1075,25 @@ pub fn restore_renderer_from_saved(
                 .find(|m| m.id == component.id.clone())
                 .expect("Couldn't get Renderer Model");
             let position = component.generic_properties.position;
+            let rotation = component.generic_properties.rotation;
 
             renderer_model.meshes.iter_mut().for_each(move |mesh| {
                 mesh.transform.update_position(position);
+                let isometry = nalgebra::Isometry3::new(
+                    vector![position[0], position[1], position[2]],
+                    vector![rotation[0], rotation[1], rotation[2]],
+                );
+                mesh.rapier_collider.set_position(isometry);
             });
+
+            // drop(renderer_state);
+
+            // let mut renderer_state = renderer_state.lock().unwrap();
+
+            renderer_state.add_collider(
+                component.id.clone(),
+                component.kind.as_ref().expect("kind").clone(),
+            );
 
             drop(renderer_state);
 
