@@ -20,6 +20,7 @@ use crate::{
     shapes::{Cube::Cube, Pyramid::Pyramid},
 };
 
+use super::Grid::GridConfig;
 use super::SimpleGizmo::AxisArrow;
 use super::{
     Grid::Grid,
@@ -109,6 +110,7 @@ pub struct RendererState {
     pub ray_intersecting: bool,
     pub ray_intersection: Option<RapierPoint<f32>>,
     pub ray_component_id: Option<Uuid>,
+    pub dragging_gizmo: bool,
 }
 
 // impl<'a> RendererState<'a> {
@@ -137,6 +139,24 @@ impl RendererState {
             &model_bind_group_layout,
             &texture_bind_group_layout,
             &color_render_mode_buffer,
+            GridConfig {
+                width: 200.0,
+                depth: 200.0,
+                spacing: 4.0,
+                line_thickness: 0.1,
+            },
+        ));
+        grids.push(Grid::new(
+            &device,
+            &model_bind_group_layout,
+            &texture_bind_group_layout,
+            &color_render_mode_buffer,
+            GridConfig {
+                width: 200.0,
+                depth: 200.0,
+                spacing: 1.0,
+                line_thickness: 0.025,
+            },
         ));
 
         let mut cubes = Vec::new();
@@ -215,6 +235,7 @@ impl RendererState {
             ray_intersecting: false,
             ray_component_id: None,
             ray_intersection: None,
+            dragging_gizmo: false,
         }
     }
 
@@ -252,8 +273,9 @@ impl RendererState {
             self.ray_component_id = Some(component_id);
         } else {
             self.ray_intersecting = false;
-            self.ray_intersection = None;
-            self.ray_component_id = None;
+            // keep stale data for sticky translation
+            // self.ray_intersection = None;
+            // self.ray_component_id = None;
         }
 
         ray
@@ -296,6 +318,51 @@ impl RendererState {
                     "Updated collider for axis {}: pos={:?}",
                     arrow.axis, translation
                 );
+            }
+        });
+    }
+
+    pub fn update_model_collider_position(
+        &mut self,
+        //arrows: &[AxisArrow; 3],
+        position: [f32; 3],
+    ) {
+        self.models.iter().for_each(|model| {
+            model.meshes.iter().for_each(|mesh| {
+                // Create translation vector based on the arrow's axis
+                let translation = vector![position[0], position[1], position[2]];
+
+                let isometry =
+                    nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
+
+                if let Some(collider) = self.collider_set.get_mut(
+                    mesh.collider_handle
+                        .expect("Couldn't get mesh collider handle"),
+                ) {
+                    collider.set_position(isometry);
+                }
+            });
+        });
+    }
+
+    pub fn update_landscape_collider_position(
+        &mut self,
+        //arrows: &[AxisArrow; 3],
+        position: [f32; 3],
+    ) {
+        self.landscapes.iter().for_each(|landscape| {
+            // Create translation vector based on the arrow's axis
+            let translation = vector![position[0], position[1], position[2]];
+
+            let isometry =
+                nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
+
+            if let Some(collider) = self.collider_set.get_mut(
+                landscape
+                    .collider_handle
+                    .expect("Couldn't get landscape collider handle"),
+            ) {
+                collider.set_position(isometry);
             }
         });
     }

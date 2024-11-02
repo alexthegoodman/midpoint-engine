@@ -71,4 +71,17 @@ impl SimpleCamera {
 
         self.update_view_projection_matrix();
     }
+
+    pub fn forward_vector(&self) -> Vector3<f32> {
+        self.direction.normalize()
+    }
+
+    pub fn up_vector(&self) -> Vector3<f32> {
+        self.up.normalize()
+    }
+
+    pub fn right_vector(&self) -> Vector3<f32> {
+        // Right vector is cross product of forward and up
+        self.direction.cross(&self.up).normalize()
+    }
 }
