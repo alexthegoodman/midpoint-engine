@@ -2285,6 +2285,7 @@ dependencies = [
  "lazy_static",
  "nalgebra",
  "nalgebra-glm",
+ "rand",
  "rapier3d",
  "raw-window-handle 0.6.2",
  "regex",
