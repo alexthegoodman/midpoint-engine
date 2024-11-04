@@ -333,6 +333,49 @@ impl RendererState {
                 .iter_mut()
                 .find(|m| m.id == component_id.to_string());
 
+            // // debug
+            // let camera = get_camera();
+            // let max_distance = 1000.0;
+            // // Directions for side checks
+            // let directions = [
+            //     ("Downward", Vector3::new(0.0, -1.0, 0.0)),
+            //     ("Upward", Vector3::new(0.0, 1.0, 0.0)),
+            //     ("Forward", Vector3::new(0.0, 0.0, -1.0)),
+            //     ("Backward", Vector3::new(0.0, 0.0, 1.0)),
+            //     ("Left", Vector3::new(-1.0, 0.0, 0.0)),
+            //     ("Right", Vector3::new(1.0, 0.0, 0.0)),
+            // ];
+
+            // // Iterate over each direction to perform a raycast
+            // for (direction_name, direction) in directions.iter() {
+            //     if let Some((collider, toi)) = self.query_pipeline.cast_ray(
+            //         &self.rigid_body_set,
+            //         &self.collider_set,
+            //         &Ray::new(camera.position, *direction),
+            //         max_distance, // set an appropriate distance to check for terrain below
+            //         true,
+            //         QueryFilter::default()
+            //             .exclude_rigid_body(
+            //                 self.player_character
+            //                     .movement_rigid_body_handle
+            //                     .expect("Couldn't get rigid body handle"),
+            //             )
+            //             .exclude_collider(
+            //                 self.player_character
+            //                     .collider_handle
+            //                     .expect("Couldn't get collider handle"),
+            //             )
+            //             .exclude_sensors(),
+            //     ) {
+            //         println!(
+            //             "{} ray hit collider {:?} at distance {}",
+            //             direction_name, collider, toi
+            //         );
+            //     } else {
+            //         println!("No collision detected in {} direction", direction_name);
+            //     }
+            // }
+
             // if self.player_character.id == component_id {
             //     let mut camera = get_camera();
 
@@ -428,6 +471,22 @@ impl RendererState {
                 //             in_x_bounds, in_z_bounds
                 //         );
                 //     }
+                // }
+
+                // if let Some(terrain_collider) = self.collider_set.get(
+                //     instance_landscape_data
+                //         .collider_handle
+                //         .expect("Couldn't get it"),
+                // ) {
+                //     println!(
+                //         "Terrain collider position: {:?}",
+                //         terrain_collider.position()
+                //     );
+                //     // println!("Terrain collider scale: {:?}", terrain_collider.scale());
+                //     println!(
+                //         "Terrain collider bounds: {:?}",
+                //         terrain_collider.compute_aabb()
+                //     );
                 // }
 
                 instance_landscape_data
@@ -531,7 +590,7 @@ impl RendererState {
                 self.player_character
                     .movement_rigid_body_handle
                     .expect("Couldn't get rigid body handle"),
-            ) // If you have an entity ID
+            )
             .exclude_collider(
                 self.player_character
                     .collider_handle

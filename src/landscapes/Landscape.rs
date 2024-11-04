@@ -89,11 +89,13 @@ impl Landscape {
         // Create terrain size that matches your actual terrain dimensions
         let terrain_size = Vector::new(
             2048.0, // Total width in world units
-            250.0,  // Total height in world units
-            2048.0, // Total depth in world units
+            // 250.0,  // Total height in world units
+            1.0, 2048.0, // Total depth in world units
         );
 
         let isometry = Isometry3::translation(position[0], position[1], position[2]);
+
+        let isometry = Isometry3::translation(-500.0, -500.0, -500.0);
 
         println!(
             "vertices length: {:?} heights length: {:?}",
@@ -101,17 +103,17 @@ impl Landscape {
             data.rapier_heights.clone().len()
         );
 
-        // let terrain_collider =
-        //     ColliderBuilder::heightfield(data.rapier_heights.clone(), terrain_size)
-        //         .friction(0.5)
-        //         .restitution(0.0)
-        //         .position(isometry)
-        //         .user_data(
-        //             Uuid::from_str(landscapeComponentId)
-        //                 .expect("Couldn't extract uuid")
-        //                 .as_u128(),
-        //         )
-        //         .build();
+        let terrain_collider =
+            ColliderBuilder::heightfield(data.rapier_heights.clone(), terrain_size)
+                .friction(0.9)
+                .restitution(0.1)
+                // .position(isometry)
+                .user_data(
+                    Uuid::from_str(landscapeComponentId)
+                        .expect("Couldn't extract uuid")
+                        .as_u128(),
+                )
+                .build();
 
         // let rapier_vertices: Vec<Point<f32>> = vertices
         //     .iter()
@@ -163,18 +165,18 @@ impl Landscape {
         //     println!("Corner height: {:?}", heightfield.heights()[(0, 0)]);
         // }
 
-        let isometry = Isometry3::translation(-10.0, -10.0, -10.0);
+        // let isometry = Isometry3::translation(-10.0, -10.0, -10.0);
 
-        let terrain_collider = ColliderBuilder::cuboid(2048.0, 0.1, 2048.0)
-            .friction(0.5)
-            .restitution(0.0)
-            .position(isometry)
-            .user_data(
-                Uuid::from_str(landscapeComponentId)
-                    .expect("Couldn't extract uuid")
-                    .as_u128(),
-            )
-            .build();
+        // let terrain_collider = ColliderBuilder::cuboid(2048.0, 0.1, 2048.0)
+        //     .friction(0.5)
+        //     .restitution(0.0)
+        //     .position(isometry)
+        //     .user_data(
+        //         Uuid::from_str(landscapeComponentId)
+        //             .expect("Couldn't extract uuid")
+        //             .as_u128(),
+        //     )
+        //     .build();
 
         // Create the ground as a fixed rigid body
 
