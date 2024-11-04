@@ -1131,6 +1131,14 @@ pub fn restore_renderer_from_saved(
 
             println!("Adding model...");
 
+            let position = component.generic_properties.position;
+            let rotation = component.generic_properties.rotation;
+
+            let isometry = nalgebra::Isometry3::new(
+                vector![position[0], position[1], position[2]],
+                vector![rotation[0], rotation[1], rotation[2]],
+            );
+
             handle_add_model(
                 renderer_state.clone(),
                 &gpu_resources.device,
@@ -1139,15 +1147,13 @@ pub fn restore_renderer_from_saved(
                 model_asset.id.clone(),
                 component.id.clone(),
                 model_asset.fileName.clone(),
+                isometry,
             );
 
             println!("Model Added!");
 
             // restore generic properties like position
             // let mut renderer_state_guard = renderer_state.lock().unwrap();
-
-            let position = component.generic_properties.position;
-            let rotation = component.generic_properties.rotation;
 
             // drop(renderer_state_guard);
 
@@ -1160,26 +1166,25 @@ pub fn restore_renderer_from_saved(
 
             drop(renderer_state_guard);
 
-            let mut renderer_state_guard = renderer_state.lock().unwrap();
+            // let mut renderer_state_guard = renderer_state.lock().unwrap();
 
-            let mut renderer_model = renderer_state_guard
-                .models
-                .iter_mut()
-                .find(|m| m.id == component.id.clone())
-                .expect("Couldn't get Renderer Model");
+            // let mut renderer_model = renderer_state_guard
+            //     .models
+            //     .iter_mut()
+            //     .find(|m| m.id == component.id.clone())
+            //     .expect("Couldn't get Renderer Model");
 
-            renderer_model.meshes.iter_mut().for_each(move |mesh| {
-                mesh.transform.update_position(position);
-                let isometry = nalgebra::Isometry3::new(
-                    vector![position[0], position[1], position[2]],
-                    vector![rotation[0], rotation[1], rotation[2]],
-                );
-                // mesh.rapier_collider.set_position(isometry);
-                mesh.rapier_rigidbody.set_position(isometry, true);
-            });
+            // renderer_model.meshes.iter_mut().for_each(move |mesh| {
+            //     mesh.transform.update_position(position);
+            //     let isometry = nalgebra::Isometry3::new(
+            //         vector![position[0], position[1], position[2]],
+            //         vector![rotation[0], rotation[1], rotation[2]],
+            //     );
+            //     // mesh.rapier_collider.set_position(isometry);
+            //     mesh.rapier_rigidbody.set_position(isometry, true);
+            // });
 
-            // drop(renderer_state);
-            drop(renderer_state_guard);
+            // drop(renderer_state_guard);
 
             // let mut renderer_state = renderer_state.lock().unwrap();
 

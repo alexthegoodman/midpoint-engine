@@ -1,4 +1,4 @@
-use nalgebra::{Matrix3, Matrix4, Point3, Vector3};
+use nalgebra::{Isometry3, Matrix3, Matrix4, Point3, Vector3};
 use serde::{Deserialize, Serialize};
 use tokio::spawn;
 use wgpu::util::DeviceExt;
@@ -246,6 +246,7 @@ pub fn handle_add_model(
     landscapeAssetId: String,
     landscapeComponentId: String,
     modelFilename: String,
+    isometry: Isometry3<f32>,
 ) {
     pause_rendering();
 
@@ -272,7 +273,7 @@ pub fn handle_add_model(
 
     let bytes = read_model(projectId, modelFilename).expect("Couldn't get model bytes");
 
-    state_guard.add_model(device, queue, &landscapeComponentId, &bytes);
+    state_guard.add_model(device, queue, &landscapeComponentId, &bytes, isometry);
 
     drop(state_guard);
 

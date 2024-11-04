@@ -794,6 +794,7 @@ impl RendererState {
         queue: &wgpu::Queue,
         model_component_id: &String,
         bytes: &Vec<u8>,
+        isometry: Isometry3<f32>,
     ) {
         let model = Model::from_glb(
             model_component_id,
@@ -804,6 +805,7 @@ impl RendererState {
             &self.texture_bind_group_layout,
             &self.texture_render_mode_buffer,
             &self.color_render_mode_buffer,
+            isometry,
         );
 
         self.models.push(model);

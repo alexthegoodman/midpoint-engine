@@ -95,7 +95,7 @@ impl Landscape {
 
         let isometry = Isometry3::translation(position[0], position[1], position[2]);
 
-        let isometry = Isometry3::translation(-500.0, -500.0, -500.0);
+        // let isometry = Isometry3::translation(-500.0, -500.0, -500.0);
 
         println!(
             "vertices length: {:?} heights length: {:?}",

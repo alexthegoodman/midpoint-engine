@@ -1,4 +1,4 @@
-use nalgebra::{Matrix4, Point3, Vector3};
+use nalgebra::{Isometry3, Matrix4, Point3, Vector3};
 use rapier3d::math::Point;
 use rapier3d::prelude::ColliderBuilder;
 use rapier3d::prelude::*;
@@ -48,6 +48,7 @@ impl Model {
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         texture_render_mode_buffer: &wgpu::Buffer,
         color_render_mode_buffer: &wgpu::Buffer,
+        isometry: Isometry3<f32>,
     ) -> Self {
         // web_sys::console::log_1(&format!("Bytes len: {:?}", bytes.len()).into());
 
@@ -318,6 +319,7 @@ impl Model {
                 let dynamic_body = RigidBodyBuilder::dynamic()
                     .additional_mass(70.0) // Explicitly set mass (e.g., 70kg for a person)
                     .linear_damping(0.1)
+                    .position(isometry)
                     .user_data(
                         Uuid::from_str(&model_component_id)
                             .expect("Couldn't extract uuid")
@@ -325,11 +327,17 @@ impl Model {
                     )
                     .build();
 
+                let euler = isometry.rotation.euler_angles();
+
                 meshes.push(Mesh {
                     // transform: Matrix4::identity(),
                     transform: Transform::new(
-                        Vector3::new(0.0, 0.0, 0.0),
-                        Vector3::new(0.0, 0.0, 0.0),
+                        Vector3::new(
+                            isometry.translation.x,
+                            isometry.translation.y,
+                            isometry.translation.z,
+                        ),
+                        Vector3::new(euler.0, euler.1, euler.2),
                         Vector3::new(1.0, 1.0, 1.0),
                         uniform_buffer,
                     ),
