@@ -1,6 +1,8 @@
 use nalgebra::{Matrix4, Vector3};
 use rapier3d::math::{Point, Vector};
-use rapier3d::prelude::{Collider, ColliderBuilder, ColliderHandle, RigidBody, RigidBodyBuilder};
+use rapier3d::prelude::{
+    Collider, ColliderBuilder, ColliderHandle, RigidBody, RigidBodyBuilder, RigidBodyHandle,
+};
 use std::str::FromStr;
 use uuid::Uuid;
 use wgpu::util::{DeviceExt, TextureDataOrder};
@@ -23,7 +25,9 @@ pub struct Landscape {
     pub texture_array_view: Option<wgpu::TextureView>,
     pub texture_bind_group: Option<wgpu::BindGroup>,
     pub rapier_heightfield: Collider,
+    pub rapier_rigidbody: RigidBody,
     pub collider_handle: Option<ColliderHandle>,
+    pub rigid_body_handle: Option<RigidBodyHandle>,
 }
 
 impl Landscape {
@@ -50,6 +54,15 @@ impl Landscape {
         let terrain_collider = ColliderBuilder::heightfield(data.rapier_heights.clone(), scale)
             .user_data(
                 Uuid::from_str(landscapeComponentId)
+                    .expect("Couldn't extract uuid")
+                    .as_u128(),
+            )
+            .build();
+
+        // Create the ground as a fixed rigid body
+        let ground_rigid_body = RigidBodyBuilder::fixed()
+            .user_data(
+                Uuid::from_str(&landscapeComponentId)
                     .expect("Couldn't extract uuid")
                     .as_u128(),
             )
@@ -158,7 +171,9 @@ impl Landscape {
             texture_array_view: None,
             texture_bind_group: None,
             rapier_heightfield: terrain_collider,
+            rapier_rigidbody: ground_rigid_body,
             collider_handle: None,
+            rigid_body_handle: None,
         }
     }
 

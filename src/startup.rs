@@ -2,10 +2,11 @@ use std::borrow::{Borrow, BorrowMut};
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::core::RendererState::{Point, RendererState, WindowSize};
+use crate::core::RendererState::{MouseState, Point, RendererState, WindowSize};
 use crate::core::Viewport::Viewport;
 use crate::handlers::{
-    get_camera, handle_add_landscape, handle_add_landscape_texture, handle_add_model, Vertex,
+    get_camera, handle_add_landscape, handle_add_landscape_texture, handle_add_model,
+    handle_mouse_move, Vertex,
 };
 use crate::helpers::saved_data::{ComponentKind, SavedState};
 use crate::helpers::utilities::load_project_state; // valid?
@@ -66,22 +67,19 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
               resolve_view: wgpu::TextureView,
               window_handle: &WindowHandle| {
             let mut handle = window_handle.borrow();
-
-            // let engine = handle
-            //     .user_engine
-            //     .as_ref()
-            //     .expect("Couldn't get user engine")
-            //     .lock()
-            //     .unwrap();
-            let editor = get_engine_editor(handle);
-            let engine = editor
-                .as_ref()
+            let mut editor = get_engine_editor(handle);
+            let mut engine = editor
+                .as_mut()
                 .expect("Couldn't get user engine")
                 .lock()
                 .unwrap();
 
             if let Some(gpu_resources) = &handle.gpu_resources {
                 {
+                    // step through physics each frame
+                    engine.step_physics_pipeline();
+
+                    // continue with visuals
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -239,32 +237,36 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
     )
 }
 
+pub struct GameState {
+    pub mouse_state: MouseState,
+}
+
 fn handle_cursor_moved(
-    // mut editor_state: Arc<Mutex<EditorState>>, // UserState?
+    mut game_state: Arc<Mutex<GameState>>, // UserState?
     gpu_resources: std::sync::Arc<GpuResources>,
     viewport: std::sync::Arc<Mutex<Viewport>>,
 ) -> Option<Box<dyn Fn(f64, f64, f64, f64)>> {
     Some(Box::new(
         move |position_x: f64, position_y: f64, logPosX: f64, logPoxY: f64| {
-            // let mut editor_state = editor_state.lock().unwrap();
+            let mut game_state = game_state.lock().unwrap();
 
-            // if editor_state.mouse_state.is_first_mouse {
-            //     editor_state.mouse_state.last_mouse_x = position_x as f64;
-            //     editor_state.mouse_state.last_mouse_y = position_y as f64;
-            //     editor_state.mouse_state.is_first_mouse = false;
+            // if game_state.mouse_state.is_first_mouse {
+            //     game_state.mouse_state.last_mouse_x = position_x as f64;
+            //     game_state.mouse_state.last_mouse_y = position_y as f64;
+            //     game_state.mouse_state.is_first_mouse = false;
             //     return;
             // }
 
-            // let dx = position_x - editor_state.mouse_state.last_mouse_x as f64;
-            // let dy = position_y - editor_state.mouse_state.last_mouse_y as f64;
+            let dx = position_x - game_state.mouse_state.last_mouse_x as f64;
+            let dy = position_y - game_state.mouse_state.last_mouse_y as f64;
 
-            // editor_state.mouse_state.last_mouse_x = position_x;
-            // editor_state.mouse_state.last_mouse_y = position_y;
+            game_state.mouse_state.last_mouse_x = position_x;
+            game_state.mouse_state.last_mouse_y = position_y;
 
-            // // Only update camera if right mouse button is pressed
+            // Only update camera if right mouse button is pressed
             // if editor_state.mouse_state.right_mouse_pressed {
-            //     // editor_state.update_camera_rotation(dx as f32, dy as f32);
-            //     handle_mouse_move(dx as f32, dy as f32);
+            // editor_state.update_camera_rotation(dx as f32, dy as f32);
+            handle_mouse_move(dx as f32, dy as f32);
             // }
         },
     ))
@@ -431,6 +433,17 @@ where
         width: window_width,
         height: window_height,
     };
+
+    let game_state = Arc::new(Mutex::new(GameState {
+        mouse_state: MouseState {
+            last_mouse_x: 0.0,
+            last_mouse_y: 0.0,
+            is_first_mouse: true,
+            right_mouse_pressed: false,
+            drag_started: false,
+            is_dragging: false,
+        },
+    }));
 
     let mut gpu_helper = Arc::new(Mutex::new(GpuHelper::new()));
     // let mut state_helper = Arc::new(Mutex::new(StateHelper::new(auth_token)));
@@ -838,6 +851,7 @@ where
 
                 window_handle.handle_cursor_moved = handle_cursor_moved(
                     // editor_state.clone(),
+                    game_state.clone(),
                     gpu_resources.clone(),
                     viewport_3.clone(),
                 );

@@ -208,6 +208,8 @@ pub fn handle_mouse_move(dx: f32, dy: f32) {
     let dx = -dx * sensitivity;
     let dy = dy * sensitivity;
 
+    println!("cursor moved {:?} {:?}", dx, dy);
+
     camera.rotate(dx, dy);
 
     camera.update();

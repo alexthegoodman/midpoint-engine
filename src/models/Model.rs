@@ -28,6 +28,8 @@ pub struct Mesh {
     pub texture_bind_group: wgpu::BindGroup,
     pub rapier_collider: Collider,
     pub collider_handle: Option<ColliderHandle>,
+    pub rapier_rigidbody: RigidBody,
+    pub rigid_body_handle: Option<RigidBodyHandle>,
 }
 
 pub struct Model {
@@ -310,6 +312,14 @@ impl Model {
                     )
                     .build();
 
+                let dynamic_body = RigidBodyBuilder::dynamic()
+                    .user_data(
+                        Uuid::from_str(&model_component_id)
+                            .expect("Couldn't extract uuid")
+                            .as_u128(),
+                    )
+                    .build();
+
                 meshes.push(Mesh {
                     // transform: Matrix4::identity(),
                     transform: Transform::new(
@@ -324,7 +334,9 @@ impl Model {
                     bind_group,
                     texture_bind_group,
                     rapier_collider,
+                    rapier_rigidbody: dynamic_body,
                     collider_handle: None,
+                    rigid_body_handle: None,
                 });
             }
         }

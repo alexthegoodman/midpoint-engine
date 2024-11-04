@@ -1,9 +1,11 @@
 use floem::keyboard::ModifiersState;
+use nalgebra::Point3;
 use rapier3d::math::Point as RapierPoint;
 use rapier3d::prelude::*;
 use rapier3d::prelude::{ColliderSet, QueryPipeline, RigidBodySet};
 use uuid::Uuid;
 
+use crate::handlers::get_camera;
 use crate::{
     core::Texture::Texture,
     helpers::saved_data::{ComponentData, ComponentKind},
@@ -21,6 +23,7 @@ use crate::{
 };
 
 use super::Grid::GridConfig;
+use super::PlayerCharacter::PlayerCharacter;
 use super::SimpleGizmo::AxisArrow;
 use super::{
     Grid::Grid,
@@ -100,9 +103,20 @@ pub struct RendererState {
 
     // pub gizmo: TestTransformGizmo,
     pub gizmo: SimpleGizmo,
+
+    pub gravity: Vector<f32>,
+    pub integration_parameters: IntegrationParameters,
+    pub physics_pipeline: PhysicsPipeline,
+    pub island_manager: IslandManager,
+    pub broad_phase: BroadPhaseMultiSap,
+    pub narrow_phase: NarrowPhase,
+    pub impulse_joint_set: ImpulseJointSet,
+    pub multibody_joint_set: MultibodyJointSet,
+    pub ccd_solver: CCDSolver,
     pub query_pipeline: QueryPipeline,
     pub rigid_body_set: RigidBodySet,
     pub collider_set: ColliderSet,
+    pub player_character: PlayerCharacter,
 
     pub current_modifiers: ModifiersState,
     pub mouse_state: MouseState,
@@ -194,6 +208,26 @@ impl RendererState {
             texture_bind_group_layout.clone(),
         );
 
+        let integration_parameters = IntegrationParameters::default();
+        let physics_pipeline = PhysicsPipeline::new();
+        let island_manager = IslandManager::new();
+        let broad_phase = DefaultBroadPhase::new();
+        let narrow_phase = NarrowPhase::new();
+        let impulse_joint_set = ImpulseJointSet::new();
+        let multibody_joint_set = MultibodyJointSet::new();
+        let ccd_solver = CCDSolver::new();
+        let query_pipeline = QueryPipeline::new();
+        let mut rigid_body_set = RigidBodySet::new();
+        let mut collider_set = ColliderSet::new();
+
+        let mut player_character = PlayerCharacter::new();
+
+        let collider_handle = collider_set.insert(player_character.movement_collider.clone());
+        player_character.collider_handle = Some(collider_handle);
+
+        let rigid_body_handle = rigid_body_set.insert(player_character.movement_rigid_body.clone());
+        player_character.movement_rigid_body_handle = Some(rigid_body_handle);
+
         Self {
             cubes,
             pyramids,
@@ -218,9 +252,19 @@ impl RendererState {
             object_selected_data: None,
 
             gizmo,
-            query_pipeline: QueryPipeline::new(),
-            rigid_body_set: RigidBodySet::new(),
-            collider_set: ColliderSet::new(),
+            gravity: vector![0.0, -9.81, 0.0],
+            integration_parameters,
+            physics_pipeline,
+            island_manager,
+            broad_phase,
+            narrow_phase,
+            impulse_joint_set,
+            multibody_joint_set,
+            ccd_solver,
+            query_pipeline,
+            rigid_body_set,
+            collider_set,
+            player_character,
 
             current_modifiers: ModifiersState::empty(),
             mouse_state: MouseState {
@@ -236,6 +280,84 @@ impl RendererState {
             ray_component_id: None,
             ray_intersection: None,
             dragging_gizmo: false,
+        }
+    }
+
+    pub fn step_physics_pipeline(&mut self) {
+        // println!("processing physics...");
+        let physics_hooks = ();
+        let event_handler = ();
+
+        self.physics_pipeline.step(
+            &self.gravity,
+            &self.integration_parameters,
+            &mut self.island_manager,
+            &mut self.broad_phase,
+            &mut self.narrow_phase,
+            &mut self.rigid_body_set,
+            &mut self.collider_set,
+            &mut self.impulse_joint_set,
+            &mut self.multibody_joint_set,
+            &mut self.ccd_solver,
+            Some(&mut self.query_pipeline),
+            &physics_hooks,
+            &event_handler,
+        );
+
+        // update visuals accordingly
+        for (rigid_body_handle, rigid_body) in self.rigid_body_set.iter() {
+            // println!("rigid body");
+            // Get the physics position
+            let physics_position = rigid_body.position();
+
+            // Convert Rapier's Isometry as needed
+            let position = physics_position.translation.vector;
+            let rotation = physics_position.rotation;
+            let euler = rotation.euler_angles(); // Returns (roll, pitch, yaw)
+            let component_id = Uuid::from_u128(rigid_body.user_data);
+
+            let instance_model_data = self
+                .models
+                .iter_mut()
+                .find(|m| m.id == component_id.to_string());
+
+            if self.player_character.id == component_id {
+                let mut camera = get_camera();
+
+                camera.position = Point3::new(position.x, position.y, position.z);
+                // mesh.transform.update_rotation([euler.0, euler.1, euler.2]);
+                // camera.set_rotation_euler(euler.0, euler.1, euler.2);
+            }
+
+            if instance_model_data.is_some() {
+                // println!("Processing model physics!");
+                let instance_model_data =
+                    instance_model_data.expect("Couldn't get instance_model_data");
+
+                instance_model_data.meshes.iter_mut().for_each(|mesh| {
+                    mesh.transform
+                        .update_position([position.x, position.y, position.z]);
+                    mesh.transform.update_rotation([euler.0, euler.1, euler.2]);
+                });
+            }
+
+            // landscapes are static anyway
+            // let instance_landscape_data = self
+            //     .landscapes
+            //     .iter_mut()
+            //     .find(|m| m.id == component_id.to_string());
+
+            // if instance_landscape_data.is_some() {
+            //     let mut instance_landscape_data =
+            //         instance_landscape_data.expect("Couldn't get instance_landscape_data");
+
+            //     instance_landscape_data
+            //         .transform
+            //         .update_position([position.x, position.y, position.z]);
+            //     instance_landscape_data
+            //         .transform
+            //         .update_rotation([euler.0, euler.1, euler.2]);
+            // }
         }
     }
 
@@ -376,11 +498,22 @@ impl RendererState {
                     .find(|l| l.id == component_id.clone())
                     .expect("Couldn't get Renderer Landscape");
 
-                // TODO: expensive clone?
                 let collider_handle = self
                     .collider_set
                     .insert(renderer_landscape.rapier_heightfield.clone());
                 renderer_landscape.collider_handle = Some(collider_handle);
+
+                let rigid_body_handle = self
+                    .rigid_body_set
+                    .insert(renderer_landscape.rapier_rigidbody.clone());
+                renderer_landscape.rigid_body_handle = Some(rigid_body_handle);
+
+                // now associate rigidbody with collider
+                self.collider_set.insert_with_parent(
+                    renderer_landscape.rapier_heightfield.clone(),
+                    rigid_body_handle,
+                    &mut self.rigid_body_set,
+                );
             }
             ComponentKind::Model => {
                 let renderer_model = self
@@ -393,6 +526,17 @@ impl RendererState {
                     // TODO: expensive clone?
                     let collider_handle = self.collider_set.insert(mesh.rapier_collider.clone());
                     mesh.collider_handle = Some(collider_handle);
+
+                    let rigid_body_handle =
+                        self.rigid_body_set.insert(mesh.rapier_rigidbody.clone());
+                    mesh.rigid_body_handle = Some(rigid_body_handle);
+
+                    // now associate rigidbody with collider
+                    self.collider_set.insert_with_parent(
+                        mesh.rapier_collider.clone(),
+                        rigid_body_handle,
+                        &mut self.rigid_body_set,
+                    );
                 });
             }
         }

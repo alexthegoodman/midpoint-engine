@@ -72,6 +72,30 @@ impl SimpleCamera {
         self.update_view_projection_matrix();
     }
 
+    pub fn set_rotation_euler(&mut self, yaw: f32, pitch: f32, roll: f32) {
+        // Create rotation from euler angles
+        // Note: Generally for FPS cameras we might ignore roll (keep it 0)
+        let rotation = Rotation3::from_euler_angles(pitch, yaw, roll);
+
+        // Reset direction vector and apply rotation
+        // Assuming forward is -z (typical in graphics)
+        self.direction = rotation * Vector3::new(0.0, 0.0, -1.0);
+
+        // Update right vector if you need it
+        let right = self.up.cross(&self.direction).normalize();
+
+        self.update_view_projection_matrix();
+    }
+
+    // You might also want this helper that only takes yaw and pitch
+    pub fn set_rotation_euler_yp(&mut self, yaw: f32, pitch: f32) {
+        // Clamp pitch to prevent camera flipping over
+        let pitch = pitch.clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+
+        // Call full euler rotation with roll = 0
+        self.set_rotation_euler(yaw, pitch, 0.0);
+    }
+
     pub fn forward_vector(&self) -> Vector3<f32> {
         self.direction.normalize()
     }
