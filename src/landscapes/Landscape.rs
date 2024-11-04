@@ -1,7 +1,10 @@
-use nalgebra::{Matrix4, Vector3};
+use nalgebra::{Isometry3, Matrix4, Point3, Vector3};
 use rapier3d::math::{Point, Vector};
+use rapier3d::parry::query::point;
+use rapier3d::prelude::{point, ActiveCollisionTypes};
 use rapier3d::prelude::{
-    Collider, ColliderBuilder, ColliderHandle, RigidBody, RigidBodyBuilder, RigidBodyHandle,
+    Collider, ColliderBuilder, ColliderHandle, InteractionGroups, RigidBody, RigidBodyBuilder,
+    RigidBodyHandle,
 };
 use std::str::FromStr;
 use uuid::Uuid;
@@ -39,19 +42,133 @@ impl Landscape {
         bind_group_layout: &wgpu::BindGroupLayout,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         color_render_mode_buffer: &wgpu::Buffer,
+        position: [f32; 3],
     ) -> Self {
         // load actual vertices and indices (most important for now)
         let scale = 1.0;
         let (vertices, indices) = Self::generate_terrain(data, scale);
 
         // Create the scale vector - this determines the size of each cell in the heightfield
+        let ratio = 250.0 / 2048.0;
         let scale = Vector::new(
-            2048.0 / (data.width - 1) as f32,  // x scale (width between columns)
-            250.0, // TODO aligh with input height on terrain                       // y scale (height scaling)
-            2048.0 / (data.height - 1) as f32, // z scale (width between rows)
+            1024.0, // x scale (width between columns) // i chose 2 because it 1024x1024 heightmap and 2048 size
+            125.0,  // y scale (height scaling)
+            1024.0, // z scale (width between rows)
         );
 
-        let terrain_collider = ColliderBuilder::heightfield(data.rapier_heights.clone(), scale)
+        // let terrain_collider = ColliderBuilder::heightfield(data.rapier_heights.clone(), scale)
+        //     .friction(0.5) // Adjust how slippery the terrain is
+        //     .restitution(0.0) // How bouncy (probably want 0 for terrain)
+        //     .collision_groups(InteractionGroups::all()) // Make sure it can collide with everything
+        //     .user_data(
+        //         Uuid::from_str(landscapeComponentId)
+        //             .expect("Couldn't extract uuid")
+        //             .as_u128(),
+        //     )
+        //     .build();
+
+        // Get the actual dimensions of your heightmap data
+        let heightmap_width = data.rapier_heights.ncols() as f32;
+        let heightmap_height = data.rapier_heights.nrows() as f32;
+
+        // Print some debug info
+        println!(
+            "Heightmap dimensions: {} x {}",
+            heightmap_width, heightmap_height
+        );
+        println!(
+            "Sample heights min/max: {:?}/{:?}",
+            data.rapier_heights
+                .iter()
+                .fold(f32::INFINITY, |a, &b| a.min(b)),
+            data.rapier_heights
+                .iter()
+                .fold(f32::NEG_INFINITY, |a, &b| a.max(b))
+        );
+
+        // Create terrain size that matches your actual terrain dimensions
+        let terrain_size = Vector::new(
+            2048.0, // Total width in world units
+            250.0,  // Total height in world units
+            2048.0, // Total depth in world units
+        );
+
+        let isometry = Isometry3::translation(position[0], position[1], position[2]);
+
+        println!(
+            "vertices length: {:?} heights length: {:?}",
+            vertices.len(),
+            data.rapier_heights.clone().len()
+        );
+
+        // let terrain_collider =
+        //     ColliderBuilder::heightfield(data.rapier_heights.clone(), terrain_size)
+        //         .friction(0.5)
+        //         .restitution(0.0)
+        //         .position(isometry)
+        //         .user_data(
+        //             Uuid::from_str(landscapeComponentId)
+        //                 .expect("Couldn't extract uuid")
+        //                 .as_u128(),
+        //         )
+        //         .build();
+
+        // let rapier_vertices: Vec<Point<f32>> = vertices
+        //     .iter()
+        //     .map(|v| point![v.position[0], v.position[1], v.position[2]])
+        //     .collect();
+
+        // // Convert flat index list into triangles
+        // let rapier_indices: Vec<[u32; 3]> = indices
+        //     .chunks(3)
+        //     .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+        //     .collect();
+
+        // println!(
+        //     "create terrain collider {:?} {:?}",
+        //     rapier_vertices.len(),
+        //     rapier_indices.len()
+        // );
+
+        // let terrain_collider = ColliderBuilder::trimesh(rapier_vertices, rapier_indices)
+        //     .friction(0.5)
+        //     .restitution(0.0)
+        //     .position(isometry)
+        //     .active_collision_types(ActiveCollisionTypes::all())
+        //     .user_data(
+        //         Uuid::from_str(landscapeComponentId)
+        //             .expect("Couldn't extract uuid")
+        //             .as_u128(),
+        //     )
+        //     .build();
+
+        // println!("terrain collider finished");
+
+        // Debug print the created heightfield
+        // if let Some(heightfield) = terrain_collider.shape().as_heightfield() {
+        //     println!("Heightfield scale: {:?}", heightfield.scale());
+        //     println!(
+        //         "Heightfield dims: {} x {}",
+        //         heightfield.heights().nrows(),
+        //         heightfield.heights().ncols()
+        //     );
+
+        //     // Print some sample heights at different points
+        //     let center_row = heightfield.heights().nrows() / 2;
+        //     let center_col = heightfield.heights().ncols() / 2;
+        //     println!(
+        //         "Center height: {:?}",
+        //         heightfield.heights()[(center_row, center_col)]
+        //     );
+        //     println!("Corner height: {:?}", heightfield.heights()[(0, 0)]);
+        // }
+
+        let isometry = Isometry3::translation(-10.0, -10.0, -10.0);
+
+        let terrain_collider = ColliderBuilder::cuboid(2048.0, 0.1, 2048.0)
+            .friction(0.5)
+            .restitution(0.0)
+            .position(isometry)
             .user_data(
                 Uuid::from_str(landscapeComponentId)
                     .expect("Couldn't extract uuid")
@@ -60,12 +177,17 @@ impl Landscape {
             .build();
 
         // Create the ground as a fixed rigid body
+
+        println!("insert landscape position {:?}", position);
+
         let ground_rigid_body = RigidBodyBuilder::fixed()
+            .position(isometry)
             .user_data(
                 Uuid::from_str(&landscapeComponentId)
                     .expect("Couldn't extract uuid")
                     .as_u128(),
             )
+            .sleeping(false)
             .build();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

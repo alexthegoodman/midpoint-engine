@@ -1,4 +1,4 @@
-use nalgebra::{Matrix4, Point3, Vector3};
+use nalgebra::{Matrix3, Matrix4, Point3, Vector3};
 use serde::{Deserialize, Serialize};
 use tokio::spawn;
 use wgpu::util::DeviceExt;
@@ -117,85 +117,108 @@ pub fn get_camera() -> &'static mut SimpleCamera {
     unsafe { CAMERA.as_mut().unwrap() }
 }
 
+// pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
+//     let camera = get_camera();
+//     let mut state_guard = state.lock().unwrap();
+
+//     let mut diff = Vector3::identity();
+
+//     match key_code {
+//         "w" => {
+//             if is_pressed {
+//                 diff = camera.direction * 0.1;
+//                 camera.position += diff;
+//             }
+//         }
+//         "s" => {
+//             if is_pressed {
+//                 diff = camera.direction * 0.1;
+//                 camera.position -= diff;
+//             }
+//         }
+//         "a" => {
+//             if is_pressed {
+//                 let right = camera.direction.cross(&camera.up).normalize();
+//                 diff = right * 0.1;
+//                 camera.position -= diff;
+//             }
+//         }
+//         "d" => {
+//             if is_pressed {
+//                 let right = camera.direction.cross(&camera.up).normalize();
+//                 diff = right * 0.1;
+//                 camera.position += diff;
+//             }
+//         }
+//         _ => {
+//             // Handle any other keys if necessary
+//         }
+//     }
+
+//     // // Calculate delta time
+//     // let now = std::time::Instant::now();
+//     // let dt = (now - state_guard.last_movement_time).as_secs_f32();
+//     // state_guard.last_movement_time = now;
+
+//     // // // Use dt to scale movement
+//     // let base_speed = 5.0; // units per second
+//     // let movement_delta = base_speed * dt; // This gives frame-rate independent movement
+//     // let desired_movement = camera.direction * movement_delta; // or use diff? I don't think this accounts for which key is pressed
+
+//     state_guard.update_player_collider_position([
+//         camera.position.x,
+//         camera.position.y,
+//         camera.position.z,
+//     ]);
+//     state_guard.update_player_character_position(diff, 0.1);
+
+//     camera.update();
+// }
+
 pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
-    let camera = get_camera();
-    // let state = get_renderer_state();
+    println!("key press");
+    let mut camera = get_camera();
     let mut state_guard = state.lock().unwrap();
 
-    // web_sys::console::log_1(&format!("Key pressed (2): {}", key_code).into());
+    // Calculate direction based on key
+    let movement_direction = if is_pressed {
+        match key_code {
+            "w" => Some(camera.direction),
+            "s" => Some(-camera.direction),
+            "a" => Some(-camera.direction.cross(&camera.up).normalize()),
+            "d" => Some(camera.direction.cross(&camera.up).normalize()),
+            _ => None,
+        }
+    } else {
+        None
+    };
 
-    match key_code {
-        "w" => {
-            if is_pressed {
-                // Handle the key press for W
-                // web_sys::console::log_1(&"Key W pressed".into());
-                camera.position += camera.direction * 0.1;
-            }
-        }
-        "s" => {
-            if is_pressed {
-                // Handle the key press for S
-                // web_sys::console::log_1(&"Key S pressed".into());
-                camera.position -= camera.direction * 0.1;
-            }
-        }
-        "a" => {
-            if is_pressed {
-                // Handle the key press for A
-                // web_sys::console::log_1(&"Key A pressed".into());
-                let right = camera.direction.cross(&camera.up).normalize();
-                camera.position -= right * 0.1;
-            }
-        }
-        "d" => {
-            if is_pressed {
-                // Handle the key press for D
-                // web_sys::console::log_1(&"Key D pressed".into());
-                let right = camera.direction.cross(&camera.up).normalize();
-                camera.position += right * 0.1;
-            }
-        }
-        "ArrowUp" => {
-            if is_pressed {
-                // Handle the key press for ArrowUp
-                // web_sys::console::log_1(&"Key ArrowUp pressed".into());
-                // state.pyramids[0].translate(Vector3::new(0.0, 0.1, 0.0));
-                // test rotation
-                // state.pyramids[0].rotate(Vector3::new(0.0, 0.1, 0.0));
-                // test scale
-                // state.pyramids[0].scale(Vector3::new(1.1, 1.1, 1.1));
+    // Calculate delta time
+    let now = std::time::Instant::now();
+    let dt = if state_guard.last_movement_time.is_some() {
+        (now - state_guard.last_movement_time.expect("Couldn't get time")).as_secs_f32()
+    } else {
+        0.0
+    };
+    state_guard.last_movement_time = Some(now);
 
-                // if state_guard.models.len() > 0 {
-                //     state_guard.models[0].meshes[0]
-                //         .transform
-                //         .translate(Vector3::new(0.0, 0.1, 0.0));
-                // }
-            }
-        }
-        "ArrowDown" => {
-            if is_pressed {
-                // Handle the key press for ArrowDown
-                // web_sys::console::log_1(&"Key ArrowDown pressed".into());
-                // state.pyramids[0].translate(Vector3::new(0.0, -0.1, 0.0));
-            }
-        }
-        "ArrowLeft" => {
-            if is_pressed {
-                // Handle the key press for ArrowLeft
-                // web_sys::console::log_1(&"Key ArrowLeft pressed".into());
-                // state.pyramids[0].translate(Vector3::new(-0.1, 0.0, 0.0));
-            }
-        }
-        "ArrowRight" => {
-            if is_pressed {
-                // Handle the key press for ArrowRight
-                // web_sys::console::log_1(&"Key ArrowRight pressed".into());
-                // state.pyramids[0].translate(Vector3::new(0.1, 0.0, 0.0));
-            }
-        }
-        _ => {
-            // Handle any other keys if necessary
-        }
+    // Apply movement if a key was pressed
+    if let Some(direction) = movement_direction {
+        let base_speed = 5.0; // units per second
+        let movement_delta = direction * base_speed * dt;
+        println!("continuing {:?}", movement_delta);
+        println!("Position before: {:?}", camera.position); // Debug log
+                                                            // Update camera position
+        camera.position = camera.position + movement_delta;
+
+        // Update physics
+        println!("physics {:?}", camera.position);
+        state_guard.update_player_rigidbody_position([
+            camera.position.x,
+            camera.position.y,
+            camera.position.z,
+        ]);
+        state_guard.update_player_character_position(movement_delta, dt);
     }
 
     camera.update();
@@ -208,7 +231,7 @@ pub fn handle_mouse_move(dx: f32, dy: f32) {
     let dx = -dx * sensitivity;
     let dy = dy * sensitivity;
 
-    println!("cursor moved {:?} {:?}", dx, dy);
+    // println!("cursor moved {:?} {:?}", dx, dy);
 
     camera.rotate(dx, dy);
 
@@ -282,6 +305,7 @@ pub fn handle_add_landscape(
     landscapeAssetId: String,
     landscapeComponentId: String,
     landscapeFilename: String,
+    position: [f32; 3],
     // callback: js_sys::Function,
 ) {
     pause_rendering();
@@ -305,7 +329,7 @@ pub fn handle_add_landscape(
 
     let data = get_landscape_pixels(projectId, landscapeAssetId, landscapeFilename);
 
-    state_guard.add_landscape(device, queue, &landscapeComponentId, &data);
+    state_guard.add_landscape(device, queue, &landscapeComponentId, &data, position);
 
     drop(state_guard);
 

@@ -305,6 +305,9 @@ impl Model {
                 // rapier physics and collision detection!
                 let rapier_collider = ColliderBuilder::convex_hull(&rapier_points)
                     .expect("Couldn't create convex hull")
+                    .friction(0.0)
+                    .restitution(0.0)
+                    .density(1.0)
                     .user_data(
                         Uuid::from_str(&model_component_id)
                             .expect("Couldn't extract uuid")
@@ -313,6 +316,8 @@ impl Model {
                     .build();
 
                 let dynamic_body = RigidBodyBuilder::dynamic()
+                    .additional_mass(70.0) // Explicitly set mass (e.g., 70kg for a person)
+                    .linear_damping(0.1)
                     .user_data(
                         Uuid::from_str(&model_component_id)
                             .expect("Couldn't extract uuid")

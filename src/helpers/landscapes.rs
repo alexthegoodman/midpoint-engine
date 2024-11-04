@@ -83,6 +83,7 @@ pub fn read_tiff_heightmap(
 
             // Set the height in the DMatrix
             heights[(y, x)] = height_value;
+            // heights[(x, y)] = height_value;
 
             let position = [
                 x as f32 * x_scale - target_width / 2.0,

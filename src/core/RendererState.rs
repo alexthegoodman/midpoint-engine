@@ -1,5 +1,5 @@
 use floem::keyboard::ModifiersState;
-use nalgebra::Point3;
+use nalgebra::{Isometry3, Point3, Vector3};
 use rapier3d::math::Point as RapierPoint;
 use rapier3d::prelude::*;
 use rapier3d::prelude::{ColliderSet, QueryPipeline, RigidBodySet};
@@ -14,6 +14,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
+use std::time::Instant;
 
 use crate::{
     helpers::{landscapes::LandscapePixelData, saved_data::LandscapeTextureKinds},
@@ -125,6 +126,8 @@ pub struct RendererState {
     pub ray_intersection: Option<RapierPoint<f32>>,
     pub ray_component_id: Option<Uuid>,
     pub dragging_gizmo: bool,
+
+    pub last_movement_time: Option<Instant>,
 }
 
 // impl<'a> RendererState<'a> {
@@ -222,11 +225,19 @@ impl RendererState {
 
         let mut player_character = PlayerCharacter::new();
 
-        let collider_handle = collider_set.insert(player_character.movement_collider.clone());
-        player_character.collider_handle = Some(collider_handle);
+        // let collider_handle = collider_set.insert(player_character.movement_collider.clone());
+        // player_character.collider_handle = Some(collider_handle);
 
         let rigid_body_handle = rigid_body_set.insert(player_character.movement_rigid_body.clone());
         player_character.movement_rigid_body_handle = Some(rigid_body_handle);
+
+        // now associate rigidbody with collider
+        let collider_handle = collider_set.insert_with_parent(
+            player_character.movement_collider.clone(),
+            rigid_body_handle,
+            &mut rigid_body_set,
+        );
+        player_character.collider_handle = Some(collider_handle);
 
         Self {
             cubes,
@@ -280,6 +291,7 @@ impl RendererState {
             ray_component_id: None,
             ray_intersection: None,
             dragging_gizmo: false,
+            last_movement_time: None,
         }
     }
 
@@ -321,12 +333,38 @@ impl RendererState {
                 .iter_mut()
                 .find(|m| m.id == component_id.to_string());
 
-            if self.player_character.id == component_id {
-                let mut camera = get_camera();
+            // if self.player_character.id == component_id {
+            //     let mut camera = get_camera();
 
-                camera.position = Point3::new(position.x, position.y, position.z);
-                // mesh.transform.update_rotation([euler.0, euler.1, euler.2]);
-                // camera.set_rotation_euler(euler.0, euler.1, euler.2);
+            //     camera.position.y = position.y;
+            // }
+            // Update camera to follow physics body
+            if let Some(rb_handle) = self.player_character.movement_rigid_body_handle {
+                if let Some(rb) = self.rigid_body_set.get(rb_handle) {
+                    let pos = rb.translation();
+
+                    // // Get the actual collider from the set
+                    // if let Some(collider_handle) = self.player_character.collider_handle {
+                    //     if let Some(collider) = self.collider_set.get(collider_handle) {
+                    //         println!("Rigid body handle: {:?}", rb_handle);
+                    //         println!("Collider handle: {:?}", collider_handle);
+                    //         println!("Collider parent: {:?}", collider.parent());
+                    //         println!(
+                    //             "Positions - RB: {:?}, Collider: {:?}",
+                    //             pos,
+                    //             collider.translation()
+                    //         );
+                    //         println!("Is collider enabled: {:?}", collider.is_enabled());
+                    //         println!(
+                    //             "Collider position relative to parent: {:?}",
+                    //             collider.position_wrt_parent()
+                    //         );
+                    //     }
+                    // }
+
+                    let mut camera = get_camera();
+                    camera.position = Point3::new(pos.x, pos.y + 0.9, pos.z); // Add eye height
+                }
             }
 
             if instance_model_data.is_some() {
@@ -341,23 +379,64 @@ impl RendererState {
                 });
             }
 
-            // landscapes are static anyway
-            // let instance_landscape_data = self
+            // if let Some(landscape) = self
             //     .landscapes
-            //     .iter_mut()
-            //     .find(|m| m.id == component_id.to_string());
-
-            // if instance_landscape_data.is_some() {
-            //     let mut instance_landscape_data =
-            //         instance_landscape_data.expect("Couldn't get instance_landscape_data");
-
-            //     instance_landscape_data
-            //         .transform
-            //         .update_position([position.x, position.y, position.z]);
-            //     instance_landscape_data
-            //         .transform
-            //         .update_rotation([euler.0, euler.1, euler.2]);
+            //     .iter()
+            //     .find(|m| m.id == component_id.to_string())
+            // {
+            //     println!("Landscape physics position: {:?}", position);
+            //     println!(
+            //         "Landscape visual position: {:?}",
+            //         landscape.transform.position
+            //     );
             // }
+
+            // landscapes are static anyway?
+            let instance_landscape_data = self
+                .landscapes
+                .iter_mut()
+                .find(|m| m.id == component_id.to_string());
+
+            if instance_landscape_data.is_some() {
+                let mut instance_landscape_data =
+                    instance_landscape_data.expect("Couldn't get instance_landscape_data");
+
+                // let mut camera = get_camera();
+                // if let Some(terrain_collider) = self.collider_set.get(
+                //     instance_landscape_data
+                //         .collider_handle
+                //         .expect("Couldn't get handle"),
+                // ) {
+                //     // Get terrain position and transform player position to terrain local space
+                //     let terrain_pos = terrain_collider.position();
+                //     println!(
+                //         "Terrain world position: {:?}",
+                //         terrain_pos.translation.vector
+                //     );
+
+                //     // Convert player position to terrain local space
+                //     let local_pos = terrain_pos.inverse() * camera.position;
+                //     println!("Player world pos: {:?}", camera.position);
+                //     println!("Player local pos (relative to terrain): {:?}", local_pos);
+
+                //     if let Some(heightfield) = terrain_collider.shape().as_heightfield() {
+                //         // Is the player within the heightfield bounds?
+                //         let in_x_bounds = local_pos.x >= -1024.0 && local_pos.x <= 1024.0;
+                //         let in_z_bounds = local_pos.z >= -1024.0 && local_pos.z <= 1024.0;
+                //         println!(
+                //             "Player in heightfield bounds: x={}, z={}",
+                //             in_x_bounds, in_z_bounds
+                //         );
+                //     }
+                // }
+
+                instance_landscape_data
+                    .transform
+                    .update_position([position.x, position.y, position.z]);
+                instance_landscape_data
+                    .transform
+                    .update_rotation([euler.0, euler.1, euler.2]);
+            }
         }
     }
 
@@ -444,6 +523,70 @@ impl RendererState {
         });
     }
 
+    pub fn update_player_character_position(&mut self, translation: Vector3<f32>, delta_time: f32) {
+        let mut camera = get_camera();
+        // Collision filter (typically you want to collide with everything except other characters)
+        let filter = QueryFilter::default()
+            .exclude_rigid_body(
+                self.player_character
+                    .movement_rigid_body_handle
+                    .expect("Couldn't get rigid body handle"),
+            ) // If you have an entity ID
+            .exclude_collider(
+                self.player_character
+                    .collider_handle
+                    .expect("Couldn't get collider handle"),
+            )
+            .exclude_sensors(); // Typically don't collide with trigger volumes
+
+        // Current character position
+        let character_pos = Isometry3::translation(
+            camera.position.x,
+            camera.position.y - 0.9, // Offset by half height to put camera at top
+            camera.position.z,
+        );
+
+        self.player_character.character_controller.move_shape(
+            delta_time,
+            &self.rigid_body_set,
+            &self.collider_set,
+            &self.query_pipeline,
+            self.player_character.movement_collider.shape(),
+            &character_pos,
+            translation,
+            filter,
+            |collision| { /* Handle or collect the collision in this closure. */ },
+        );
+
+        camera.position = Point3::new(
+            camera.position.x + translation.x,
+            camera.position.y - 0.9 + translation.y,
+            camera.position.z + translation.z,
+        );
+
+        // TODO: update collider with handle?
+    }
+
+    pub fn update_player_collider_position(
+        &mut self,
+        //arrows: &[AxisArrow; 3],
+        position: [f32; 3],
+    ) {
+        // Create translation vector based on the arrow's axis
+        let translation = vector![position[0], position[1], position[2]];
+
+        let isometry =
+            nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
+
+        if let Some(collider) = self.collider_set.get_mut(
+            self.player_character
+                .collider_handle
+                .expect("Couldn't get mesh collider handle"),
+        ) {
+            collider.set_position(isometry);
+        }
+    }
+
     pub fn update_model_collider_position(
         &mut self,
         //arrows: &[AxisArrow; 3],
@@ -462,6 +605,49 @@ impl RendererState {
                         .expect("Couldn't get mesh collider handle"),
                 ) {
                     collider.set_position(isometry);
+                }
+            });
+        });
+    }
+
+    pub fn update_player_rigidbody_position(
+        &mut self,
+        //arrows: &[AxisArrow; 3],
+        position: [f32; 3],
+    ) {
+        // Create translation vector based on the arrow's axis
+        let translation = vector![position[0], position[1], position[2]];
+
+        let isometry =
+            nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
+
+        if let Some(rigidbody) = self.rigid_body_set.get_mut(
+            self.player_character
+                .movement_rigid_body_handle
+                .expect("Couldn't get mesh rigidbody handle"),
+        ) {
+            rigidbody.set_position(isometry, true);
+        }
+    }
+
+    pub fn update_model_rigidbody_position(
+        &mut self,
+        //arrows: &[AxisArrow; 3],
+        position: [f32; 3],
+    ) {
+        self.models.iter().for_each(|model| {
+            model.meshes.iter().for_each(|mesh| {
+                // Create translation vector based on the arrow's axis
+                let translation = vector![position[0], position[1], position[2]];
+
+                let isometry =
+                    nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
+
+                if let Some(rigidbody) = self.rigid_body_set.get_mut(
+                    mesh.rigid_body_handle
+                        .expect("Couldn't get mesh collider handle"),
+                ) {
+                    rigidbody.set_position(isometry, true);
                 }
             });
         });
@@ -498,10 +684,10 @@ impl RendererState {
                     .find(|l| l.id == component_id.clone())
                     .expect("Couldn't get Renderer Landscape");
 
-                let collider_handle = self
-                    .collider_set
-                    .insert(renderer_landscape.rapier_heightfield.clone());
-                renderer_landscape.collider_handle = Some(collider_handle);
+                // let collider_handle = self
+                //     .collider_set
+                //     .insert(renderer_landscape.rapier_heightfield.clone());
+                // renderer_landscape.collider_handle = Some(collider_handle);
 
                 let rigid_body_handle = self
                     .rigid_body_set
@@ -509,11 +695,12 @@ impl RendererState {
                 renderer_landscape.rigid_body_handle = Some(rigid_body_handle);
 
                 // now associate rigidbody with collider
-                self.collider_set.insert_with_parent(
+                let collider_handle = self.collider_set.insert_with_parent(
                     renderer_landscape.rapier_heightfield.clone(),
                     rigid_body_handle,
                     &mut self.rigid_body_set,
                 );
+                renderer_landscape.collider_handle = Some(collider_handle);
             }
             ComponentKind::Model => {
                 let renderer_model = self
@@ -523,20 +710,20 @@ impl RendererState {
                     .expect("Couldn't get Renderer Model");
 
                 renderer_model.meshes.iter_mut().for_each(|mesh| {
-                    // TODO: expensive clone?
-                    let collider_handle = self.collider_set.insert(mesh.rapier_collider.clone());
-                    mesh.collider_handle = Some(collider_handle);
+                    // let collider_handle = self.collider_set.insert(mesh.rapier_collider.clone());
+                    // mesh.collider_handle = Some(collider_handle);
 
                     let rigid_body_handle =
                         self.rigid_body_set.insert(mesh.rapier_rigidbody.clone());
                     mesh.rigid_body_handle = Some(rigid_body_handle);
 
                     // now associate rigidbody with collider
-                    self.collider_set.insert_with_parent(
+                    let collider_handle = self.collider_set.insert_with_parent(
                         mesh.rapier_collider.clone(),
                         rigid_body_handle,
                         &mut self.rigid_body_set,
                     );
+                    mesh.collider_handle = Some(collider_handle);
                 });
             }
         }
@@ -569,6 +756,7 @@ impl RendererState {
         queue: &wgpu::Queue,
         landscapeComponentId: &String,
         data: &LandscapePixelData,
+        position: [f32; 3],
     ) {
         let landscape = Landscape::new(
             landscapeComponentId,
@@ -579,6 +767,7 @@ impl RendererState {
             &self.texture_bind_group_layout,
             // &self.texture_render_mode_buffer,
             &self.color_render_mode_buffer,
+            position,
         );
 
         self.landscapes.push(landscape);

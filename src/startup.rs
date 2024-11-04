@@ -6,7 +6,7 @@ use crate::core::RendererState::{MouseState, Point, RendererState, WindowSize};
 use crate::core::Viewport::Viewport;
 use crate::handlers::{
     get_camera, handle_add_landscape, handle_add_landscape_texture, handle_add_model,
-    handle_mouse_move, Vertex,
+    handle_key_press, handle_mouse_move, Vertex,
 };
 use crate::helpers::saved_data::{ComponentKind, SavedState};
 use crate::helpers::utilities::load_project_state; // valid?
@@ -76,6 +76,9 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
 
             if let Some(gpu_resources) = &handle.gpu_resources {
                 {
+                    // update rapier collisions
+                    engine.update_rapier();
+
                     // step through physics each frame
                     engine.step_physics_pipeline();
 
@@ -154,7 +157,7 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
 
                     let mut camera = get_camera();
 
-                    // TODO: bad to call on every frame?
+                    // TODO: bad to call on every frame? pretty sure its called when needed
                     camera.update();
 
                     let camera_matrix = camera.view_projection_matrix;
@@ -239,10 +242,48 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
 
 pub struct GameState {
     pub mouse_state: MouseState,
+    pub renderer_state: Option<Arc<Mutex<RendererState>>>,
+}
+
+impl GameState {
+    pub fn handle_key_press(&mut self, key_code: &str, is_pressed: bool) {
+        let mut renderer_state = self
+            .renderer_state
+            .as_mut()
+            .expect("Couldn't get RendererState")
+            .lock()
+            .unwrap();
+        const MOVE_SPEED: f32 = 2.0;
+
+        if is_pressed {
+            if let Some(rb_handle) = renderer_state.player_character.movement_rigid_body_handle {
+                if let Some(rb) = renderer_state.rigid_body_set.get_mut(rb_handle) {
+                    let camera = get_camera();
+                    let movement = match key_code {
+                        "w" => camera.direction,
+                        "s" => -camera.direction,
+                        "a" => -camera.direction.cross(&camera.up).normalize(),
+                        "d" => camera.direction.cross(&camera.up).normalize(),
+                        _ => return,
+                    };
+
+                    // Apply movement through physics system
+                    let movement = movement * MOVE_SPEED;
+                    // Keep vertical velocity (for gravity/jumping)
+                    let mut linvel = rb.linvel().clone();
+                    linvel.x = movement.x;
+                    linvel.z = movement.z;
+                    rb.set_linvel(linvel, true);
+                }
+            }
+        }
+
+        drop(renderer_state);
+    }
 }
 
 fn handle_cursor_moved(
-    mut game_state: Arc<Mutex<GameState>>, // UserState?
+    mut game_state: Arc<Mutex<GameState>>,
     gpu_resources: std::sync::Arc<GpuResources>,
     viewport: std::sync::Arc<Mutex<Viewport>>,
 ) -> Option<Box<dyn Fn(f64, f64, f64, f64)>> {
@@ -273,7 +314,7 @@ fn handle_cursor_moved(
 }
 
 fn handle_mouse_input(
-    // mut editor_state: Arc<Mutex<EditorState>>, // RenderState?
+    mut game_state: Arc<Mutex<GameState>>,
     gpu_resources: std::sync::Arc<GpuResources>,
     viewport: std::sync::Arc<Mutex<Viewport>>,
     // record: Arc<Mutex<Record<ObjectEdit>>>,
@@ -370,11 +411,12 @@ use floem_winit::keyboard::NamedKey;
 use floem_winit::keyboard::{Key, SmolStr};
 
 fn handle_keyboard_input(
-    // editor_state: Arc<Mutex<EditorState>>,
+    mut game_state: Arc<Mutex<GameState>>,
     gpu_resources: std::sync::Arc<GpuResources>,
     viewport: std::sync::Arc<Mutex<Viewport>>,
 ) -> Option<Box<dyn FnMut(KeyEvent)>> {
     Some(Box::new(move |event: KeyEvent| {
+        let mut game_state = game_state.lock().unwrap();
         // if event.state != ElementState::Pressed {
         //     return;
         // }
@@ -383,7 +425,7 @@ fn handle_keyboard_input(
         // // Check for Ctrl+Z (undo)
         // let modifiers = editor_state.current_modifiers;
 
-        // let logical_key_text = event.logical_key.to_text().unwrap_or_default();
+        let logical_key_text = event.logical_key.to_text().unwrap_or_default();
         // match logical_key_text {
         //     "z" => {
         //         if modifiers.control_key() {
@@ -402,11 +444,7 @@ fn handle_keyboard_input(
         //     _ => {}
         // }
 
-        // handle_key_press(
-        //     Arc::clone(&editor_state.renderer_state),
-        //     logical_key_text,
-        //     true,
-        // );
+        game_state.handle_key_press(logical_key_text, true);
     }))
 }
 
@@ -435,6 +473,7 @@ where
     };
 
     let game_state = Arc::new(Mutex::new(GameState {
+        renderer_state: None,
         mouse_state: MouseState {
             last_mouse_x: 0.0,
             last_mouse_y: 0.0,
@@ -833,6 +872,11 @@ where
 
                 let renderer_state_2 = Arc::clone(&renderer_state);
                 let renderer_state_3 = Arc::clone(&renderer_state);
+                let renderer_state_4 = Arc::clone(&renderer_state);
+
+                let mut game_state_guard = game_state.lock().unwrap();
+                game_state_guard.renderer_state = Some(renderer_state_4);
+                drop(game_state_guard);
 
                 // do before restore
                 let mut temp_lock = gpu_cloned2.lock().unwrap();
@@ -857,6 +901,7 @@ where
                 );
                 window_handle.handle_mouse_input = handle_mouse_input(
                     // editor_state.clone(),
+                    game_state.clone(),
                     gpu_resources.clone(),
                     viewport_4.clone(),
                     // record_2.clone(),
@@ -876,6 +921,7 @@ where
                 // );
                 window_handle.handle_keyboard_input = handle_keyboard_input(
                     // editor_state.clone(),
+                    game_state.clone(),
                     gpu_resources.clone(),
                     viewport_4.clone(),
                 );
@@ -934,6 +980,9 @@ pub fn restore_renderer_from_saved(
     components.iter().for_each(move |component| {
         // let saved_state = saved_state.clone();
         if *component.kind.as_ref().expect("Couldn't get kind") == ComponentKind::Landscape {
+            let position = component.generic_properties.position;
+            let rotation = component.generic_properties.rotation;
+
             let landscape_asset = saved_state
                 .landscapes
                 .as_ref()
@@ -955,6 +1004,7 @@ pub fn restore_renderer_from_saved(
                     .expect("Couldn't get heightmao")
                     .fileName
                     .clone(),
+                position,
             );
 
             println!("onward...");
@@ -967,18 +1017,15 @@ pub fn restore_renderer_from_saved(
                 .iter_mut()
                 .find(|l| l.id == component.id.clone())
                 .expect("Couldn't get Renderer Landscape");
-            let position = component.generic_properties.position;
-            let rotation = component.generic_properties.rotation;
 
             renderer_landscape.transform.update_position(position);
             // including rapier!
             // Convert euler angles (Vector3) to Quaternion/Isometry
             let isometry = nalgebra::Isometry3::new(
                 vector![position[0], position[1], position[2]],
+                // vector![-50.0, -50.0, -50.0],
                 vector![rotation[0], rotation[1], rotation[2]],
             );
-
-            renderer_landscape.rapier_heightfield.set_position(isometry);
 
             drop(renderer_state_guard);
 
@@ -990,6 +1037,22 @@ pub fn restore_renderer_from_saved(
             );
 
             drop(renderer_state_guard);
+
+            // may not be needed if initializing the position on rigidbody
+            // let mut renderer_state_guard = renderer_state.lock().unwrap();
+
+            // let mut renderer_landscape = renderer_state_guard
+            //     .landscapes
+            //     .iter_mut()
+            //     .find(|l| l.id == component.id.clone())
+            //     .expect("Couldn't get Renderer Landscape");
+
+            // // renderer_landscape.rapier_heightfield.set_position(isometry);
+            // renderer_landscape
+            //     .rapier_rigidbody
+            //     .set_position(isometry, true);
+
+            // drop(renderer_state_guard);
 
             // restore landscape specific properties
             let landscape_properties = component
@@ -1081,15 +1144,29 @@ pub fn restore_renderer_from_saved(
             println!("Model Added!");
 
             // restore generic properties like position
-            let mut renderer_state = renderer_state.lock().unwrap();
+            // let mut renderer_state_guard = renderer_state.lock().unwrap();
 
-            let mut renderer_model = renderer_state
+            let position = component.generic_properties.position;
+            let rotation = component.generic_properties.rotation;
+
+            // drop(renderer_state_guard);
+
+            let mut renderer_state_guard = renderer_state.lock().unwrap();
+
+            renderer_state_guard.add_collider(
+                component.id.clone(),
+                component.kind.as_ref().expect("kind").clone(),
+            );
+
+            drop(renderer_state_guard);
+
+            let mut renderer_state_guard = renderer_state.lock().unwrap();
+
+            let mut renderer_model = renderer_state_guard
                 .models
                 .iter_mut()
                 .find(|m| m.id == component.id.clone())
                 .expect("Couldn't get Renderer Model");
-            let position = component.generic_properties.position;
-            let rotation = component.generic_properties.rotation;
 
             renderer_model.meshes.iter_mut().for_each(move |mesh| {
                 mesh.transform.update_position(position);
@@ -1097,19 +1174,14 @@ pub fn restore_renderer_from_saved(
                     vector![position[0], position[1], position[2]],
                     vector![rotation[0], rotation[1], rotation[2]],
                 );
-                mesh.rapier_collider.set_position(isometry);
+                // mesh.rapier_collider.set_position(isometry);
+                mesh.rapier_rigidbody.set_position(isometry, true);
             });
 
             // drop(renderer_state);
+            drop(renderer_state_guard);
 
             // let mut renderer_state = renderer_state.lock().unwrap();
-
-            renderer_state.add_collider(
-                component.id.clone(),
-                component.kind.as_ref().expect("kind").clone(),
-            );
-
-            drop(renderer_state);
 
             println!("Finished restoring!");
         }
