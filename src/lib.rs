@@ -1,3 +1,4 @@
+pub mod animations;
 pub mod behaviors;
 pub mod core;
 pub mod handlers;
