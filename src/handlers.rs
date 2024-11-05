@@ -117,112 +117,112 @@ pub fn get_camera() -> &'static mut SimpleCamera {
     unsafe { CAMERA.as_mut().unwrap() }
 }
 
-// pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
-//     let camera = get_camera();
-//     let mut state_guard = state.lock().unwrap();
-
-//     let mut diff = Vector3::identity();
-
-//     match key_code {
-//         "w" => {
-//             if is_pressed {
-//                 diff = camera.direction * 0.1;
-//                 camera.position += diff;
-//             }
-//         }
-//         "s" => {
-//             if is_pressed {
-//                 diff = camera.direction * 0.1;
-//                 camera.position -= diff;
-//             }
-//         }
-//         "a" => {
-//             if is_pressed {
-//                 let right = camera.direction.cross(&camera.up).normalize();
-//                 diff = right * 0.1;
-//                 camera.position -= diff;
-//             }
-//         }
-//         "d" => {
-//             if is_pressed {
-//                 let right = camera.direction.cross(&camera.up).normalize();
-//                 diff = right * 0.1;
-//                 camera.position += diff;
-//             }
-//         }
-//         _ => {
-//             // Handle any other keys if necessary
-//         }
-//     }
-
-//     // // Calculate delta time
-//     // let now = std::time::Instant::now();
-//     // let dt = (now - state_guard.last_movement_time).as_secs_f32();
-//     // state_guard.last_movement_time = now;
-
-//     // // // Use dt to scale movement
-//     // let base_speed = 5.0; // units per second
-//     // let movement_delta = base_speed * dt; // This gives frame-rate independent movement
-//     // let desired_movement = camera.direction * movement_delta; // or use diff? I don't think this accounts for which key is pressed
-
-//     state_guard.update_player_collider_position([
-//         camera.position.x,
-//         camera.position.y,
-//         camera.position.z,
-//     ]);
-//     state_guard.update_player_character_position(diff, 0.1);
-
-//     camera.update();
-// }
-
 pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
-    println!("key press");
-    let mut camera = get_camera();
-    let mut state_guard = state.lock().unwrap();
+    let camera = get_camera();
+    // let mut state_guard = state.lock().unwrap();
 
-    // Calculate direction based on key
-    let movement_direction = if is_pressed {
-        match key_code {
-            "w" => Some(camera.direction),
-            "s" => Some(-camera.direction),
-            "a" => Some(-camera.direction.cross(&camera.up).normalize()),
-            "d" => Some(camera.direction.cross(&camera.up).normalize()),
-            _ => None,
+    let mut diff = Vector3::identity();
+
+    match key_code {
+        "w" => {
+            if is_pressed {
+                diff = camera.direction * 0.1;
+                camera.position += diff;
+            }
         }
-    } else {
-        None
-    };
-
-    // Calculate delta time
-    let now = std::time::Instant::now();
-    let dt = if state_guard.last_movement_time.is_some() {
-        (now - state_guard.last_movement_time.expect("Couldn't get time")).as_secs_f32()
-    } else {
-        0.0
-    };
-    state_guard.last_movement_time = Some(now);
-
-    // Apply movement if a key was pressed
-    if let Some(direction) = movement_direction {
-        let base_speed = 5.0; // units per second
-        let movement_delta = direction * base_speed * dt;
-        println!("continuing {:?}", movement_delta);
-        println!("Position before: {:?}", camera.position); // Debug log
-                                                            // Update camera position
-        camera.position = camera.position + movement_delta;
-
-        // Update physics
-        println!("physics {:?}", camera.position);
-        state_guard.update_player_rigidbody_position([
-            camera.position.x,
-            camera.position.y,
-            camera.position.z,
-        ]);
-        state_guard.update_player_character_position(movement_delta, dt);
+        "s" => {
+            if is_pressed {
+                diff = camera.direction * 0.1;
+                camera.position -= diff;
+            }
+        }
+        "a" => {
+            if is_pressed {
+                let right = camera.direction.cross(&camera.up).normalize();
+                diff = right * 0.1;
+                camera.position -= diff;
+            }
+        }
+        "d" => {
+            if is_pressed {
+                let right = camera.direction.cross(&camera.up).normalize();
+                diff = right * 0.1;
+                camera.position += diff;
+            }
+        }
+        _ => {
+            // Handle any other keys if necessary
+        }
     }
+
+    // // Calculate delta time
+    // let now = std::time::Instant::now();
+    // let dt = (now - state_guard.last_movement_time).as_secs_f32();
+    // state_guard.last_movement_time = now;
+
+    // // // Use dt to scale movement
+    // let base_speed = 5.0; // units per second
+    // let movement_delta = base_speed * dt; // This gives frame-rate independent movement
+    // let desired_movement = camera.direction * movement_delta; // or use diff? I don't think this accounts for which key is pressed
+
+    // state_guard.update_player_collider_position([
+    //     camera.position.x,
+    //     camera.position.y,
+    //     camera.position.z,
+    // ]);
+    // state_guard.update_player_character_position(diff, 0.1);
 
     camera.update();
 }
+
+// pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
+//     println!("key press");
+//     let mut camera = get_camera();
+//     let mut state_guard = state.lock().unwrap();
+
+//     // Calculate direction based on key
+//     let movement_direction = if is_pressed {
+//         match key_code {
+//             "w" => Some(camera.direction),
+//             "s" => Some(-camera.direction),
+//             "a" => Some(-camera.direction.cross(&camera.up).normalize()),
+//             "d" => Some(camera.direction.cross(&camera.up).normalize()),
+//             _ => None,
+//         }
+//     } else {
+//         None
+//     };
+
+//     // Calculate delta time
+//     let now = std::time::Instant::now();
+//     let dt = if state_guard.last_movement_time.is_some() {
+//         (now - state_guard.last_movement_time.expect("Couldn't get time")).as_secs_f32()
+//     } else {
+//         0.0
+//     };
+//     state_guard.last_movement_time = Some(now);
+
+//     // Apply movement if a key was pressed
+//     if let Some(direction) = movement_direction {
+//         let base_speed = 5.0; // units per second
+//         let movement_delta = direction * base_speed * dt;
+//         println!("continuing {:?}", movement_delta);
+//         println!("Position before: {:?}", camera.position); // Debug log
+//                                                             // Update camera position
+//         camera.position = camera.position + movement_delta;
+
+//         // Update physics
+//         println!("physics {:?}", camera.position);
+//         state_guard.update_player_rigidbody_position([
+//             camera.position.x,
+//             camera.position.y,
+//             camera.position.z,
+//         ]);
+//         state_guard.update_player_character_position(movement_delta, dt);
+//     }
+
+//     camera.update();
+// }
 
 pub fn handle_mouse_move(dx: f32, dy: f32) {
     let camera = get_camera();

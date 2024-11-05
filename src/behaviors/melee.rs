@@ -109,7 +109,7 @@ pub struct EvadeBehavior {
     pub evade_distance: f32,
     pub cooldown: f32,
     last_evade: Instant,
-    rng: rand::rngs::ThreadRng,
+    // rng: rand::rngs::ThreadRng,
 }
 
 impl EvadeBehavior {
@@ -119,7 +119,7 @@ impl EvadeBehavior {
             evade_distance,
             cooldown: 1.0,
             last_evade: Instant::now(),
-            rng: rand::thread_rng(),
+            // rng: rand::thread_rng(),
         }
     }
 
@@ -138,6 +138,8 @@ impl EvadeBehavior {
             return false;
         }
 
+        let mut rng = rand::thread_rng();
+
         let current_pos = transform.position;
 
         // Get threat position
@@ -153,7 +155,7 @@ impl EvadeBehavior {
 
         // Calculate evade direction (perpendicular to threat direction)
         let to_threat = threat_pos - current_pos;
-        let angle = self.rng.gen_bool(0.5); // Randomly choose left or right
+        let angle = rng.gen_bool(0.5); // Randomly choose left or right
         let evade_direction = if angle {
             Vec3::new(-to_threat.z, 0.0, to_threat.x).normalize()
         } else {
@@ -286,12 +288,13 @@ impl MeleeCombatBehavior {
         dt: f32,
     ) -> Option<f32> {
         // Returns damage dealt if attack lands
-        let min_state_duration = 0.5; // Minimum time to stay in a state
+        let min_state_duration = 8.0; // Minimum time to stay in a state
         let state_duration = self.last_state_change.elapsed().as_secs_f32();
 
         // State machine logic
         match self.state_machine {
             CombatState::Chasing => {
+                println!("Chasing");
                 self.chase.update(
                     rigid_body_set,
                     collider_set,
@@ -320,6 +323,7 @@ impl MeleeCombatBehavior {
                 None
             }
             CombatState::Attacking => {
+                println!("Attacking");
                 let damage = self.attack.update(
                     rigid_body_set,
                     collider_set,
@@ -338,14 +342,15 @@ impl MeleeCombatBehavior {
                         target_pos.z,
                     ));
 
-                    if distance < self.attack.stats.range * 0.5 {
-                        self.state_machine = CombatState::Evading;
-                        self.last_state_change = Instant::now();
-                    }
+                    // if distance < self.attack.stats.range * 0.5 {
+                    self.state_machine = CombatState::Evading;
+                    self.last_state_change = Instant::now();
+                    // }
                 }
                 damage
             }
             CombatState::Evading => {
+                println!("Evading");
                 let is_evading = self.evade.update(
                     rigid_body_set,
                     collider_set,
@@ -364,6 +369,7 @@ impl MeleeCombatBehavior {
                 None
             }
             CombatState::Defending => {
+                println!("Defending");
                 // Transition back to chasing after defense
                 if state_duration >= min_state_duration {
                     self.state_machine = CombatState::Chasing;

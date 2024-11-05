@@ -10,24 +10,46 @@ use rapier3d::{
 };
 use uuid::Uuid;
 
-use crate::{behaviors::wander::WanderBehavior, handlers::get_camera, models::Model::Model};
+use crate::{
+    behaviors::{
+        melee::{AttackStats, MeleeCombatBehavior},
+        wander::WanderBehavior,
+    },
+    handlers::get_camera,
+    models::Model::Model,
+};
 
 use super::{RendererState::RendererState, SimpleCamera::SimpleCamera};
 
 pub struct NPC {
     pub id: Uuid,
     pub model_id: String,
-    pub test_behavior: WanderBehavior,
+    pub test_behavior: MeleeCombatBehavior,
 }
 
 impl NPC {
     pub fn new(model_id: String) -> Self {
-        let wander = WanderBehavior::new(50.0, 20.0);
+        // let wander = WanderBehavior::new(50.0, 100.0);
+        let attack_stats = AttackStats {
+            damage: 10.0,
+            range: 2.0,
+            cooldown: 1.0,
+            wind_up_time: 0.3,
+            recovery_time: 0.5,
+        };
+
+        let melee_combat = MeleeCombatBehavior::new(
+            100.0, // chase_speed
+            50.0,  // detection_radius
+            attack_stats,
+            50.0, // evade_speed
+            0.7,  // block_chance
+        );
 
         NPC {
             id: Uuid::new_v4(),
             model_id,
-            test_behavior: wander,
+            test_behavior: melee_combat,
         }
     }
 }

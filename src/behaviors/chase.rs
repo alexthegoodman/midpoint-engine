@@ -106,7 +106,7 @@ impl ChaseBehavior {
                 options,
                 QueryFilter::default()
                     .exclude_rigid_body(rigid_body_handle)
-                    .exclude_rigid_body(self.target_handle.unwrap()),
+                    .exclude_rigid_body(target_handle),
             )
             .is_some();
 

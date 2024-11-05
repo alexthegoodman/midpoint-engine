@@ -484,6 +484,7 @@ impl RendererState {
                     .find(|m| m.model_id == component_id.to_string())
                 {
                     if let Some(first_mesh) = instance_model_data.meshes.get_mut(0) {
+                        let current_stamina = 100.0;
                         instance_npc_data.test_behavior.update(
                             &mut self.rigid_body_set,
                             &self.collider_set,
@@ -491,8 +492,12 @@ impl RendererState {
                             first_mesh
                                 .rigid_body_handle
                                 .expect("Couldn't get rigid body handle"),
+                            self.player_character
+                                .movement_rigid_body_handle
+                                .expect("Couldn't get rigid body handle"),
                             &first_mesh.rapier_collider,
                             &mut first_mesh.transform,
+                            current_stamina,
                             dt,
                         );
                     }
