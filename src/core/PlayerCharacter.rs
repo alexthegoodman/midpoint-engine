@@ -10,9 +10,27 @@ use rapier3d::{
 };
 use uuid::Uuid;
 
-use crate::{handlers::get_camera, models::Model::Model};
+use crate::{behaviors::wander::WanderBehavior, handlers::get_camera, models::Model::Model};
 
 use super::{RendererState::RendererState, SimpleCamera::SimpleCamera};
+
+pub struct NPC {
+    pub id: Uuid,
+    pub model_id: String,
+    pub test_behavior: WanderBehavior,
+}
+
+impl NPC {
+    pub fn new(model_id: String) -> Self {
+        let wander = WanderBehavior::new(50.0, 20.0);
+
+        NPC {
+            id: Uuid::new_v4(),
+            model_id,
+            test_behavior: wander,
+        }
+    }
+}
 
 pub struct PlayerCharacter {
     pub id: Uuid,

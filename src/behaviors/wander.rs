@@ -37,30 +37,90 @@ impl WanderBehavior {
         }
     }
 
+    // pub fn update(
+    //     &mut self,
+    //     // renderer_state: Arc<Mutex<RendererState>>,
+    //     // rigid_body: &mut RigidBody,
+    //     rigid_body_set: &mut RigidBodySet,
+    //     collider_set: &ColliderSet,
+    //     query_pipeline: &QueryPipeline,
+    //     rigid_body_handle: RigidBodyHandle,
+    //     collider: &Collider,
+    //     transform: &mut Transform,
+    //     dt: f32,
+    // ) {
+    //     if let Some(rigid_body) = rigid_body_set.get_mut(rigid_body_handle) {
+    //         // let mut renderer_state = renderer_state.lock().unwrap();
+    //         let current_pos = transform.position;
+
+    //         // Update target periodically or when reached
+    //         if self.last_update.elapsed().as_secs_f32() > 2.0
+    //             || current_pos.metric_distance(&self.target_position) < 0.5
+    //         {
+    //             self.choose_new_target(rigid_body_set, collider_set, query_pipeline, current_pos);
+    //             self.last_update = Instant::now();
+    //         }
+
+    //         // Calculate movement direction
+    //         let direction = (self.target_position - current_pos).normalize();
+
+    //         // Forward obstacle detection using shape cast
+    //         let shape = collider.shape().clone();
+    //         let shape_pos = Isometry::new(
+    //             vector![current_pos.x, current_pos.y, current_pos.z],
+    //             vector![0.0, 0.0, 0.0],
+    //         );
+    //         let shape_vel = vector![
+    //             direction.x * self.min_distance,
+    //             direction.y * self.min_distance,
+    //             direction.z * self.min_distance
+    //         ];
+
+    //         let options = ShapeCastOptions {
+    //             max_time_of_impact: 1.0,
+    //             target_distance: 0.0,
+    //             stop_at_penetration: false,
+    //             compute_impact_geometry_on_penetration: true,
+    //         };
+
+    //         if query_pipeline
+    //             .cast_shape(
+    //                 &rigid_body_set,
+    //                 &collider_set,
+    //                 &shape_pos,
+    //                 &shape_vel,
+    //                 shape,
+    //                 options,
+    //                 QueryFilter::default().exclude_rigid_body(rigid_body_handle),
+    //             )
+    //             .is_some()
+    //         {
+    //             self.choose_new_target(rigid_body_set, collider_set, query_pipeline, current_pos);
+    //             return;
+    //         }
+
+    //         // LATER: slope detection?
+
+    //         // Apply movement
+    //         let movement = direction * self.speed * dt;
+    //         rigid_body.set_linvel(vector![movement.x, movement.y, movement.z], true);
+    //     }
+    // }
+
     pub fn update(
         &mut self,
-        renderer_state: Arc<Mutex<RendererState>>,
-        rigid_body: &mut RigidBody,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &ColliderSet,
+        query_pipeline: &QueryPipeline,
         rigid_body_handle: RigidBodyHandle,
         collider: &Collider,
         transform: &mut Transform,
         dt: f32,
     ) {
-        let mut renderer_state = renderer_state.lock().unwrap();
+        // First, collect all the data we need
         let current_pos = transform.position;
-
-        // Update target periodically or when reached
-        if self.last_update.elapsed().as_secs_f32() > 2.0
-            || current_pos.metric_distance(&self.target_position) < 0.5
-        {
-            self.choose_new_target(
-                renderer_state.rigid_body_set.clone(),
-                renderer_state.collider_set.clone(),
-                renderer_state.query_pipeline.clone(),
-                current_pos,
-            );
-            self.last_update = Instant::now();
-        }
+        let need_new_target = self.last_update.elapsed().as_secs_f32() > 8.0
+            || current_pos.metric_distance(&self.target_position) < 0.5;
 
         // Calculate movement direction
         let direction = (self.target_position - current_pos).normalize();
@@ -84,78 +144,60 @@ impl WanderBehavior {
             compute_impact_geometry_on_penetration: true,
         };
 
-        if renderer_state
-            .query_pipeline
+        let obstacle_detected = query_pipeline
             .cast_shape(
-                &renderer_state.rigid_body_set,
-                &renderer_state.collider_set,
+                &rigid_body_set, // immutable borrow here is fine
+                &collider_set,
                 &shape_pos,
                 &shape_vel,
                 shape,
                 options,
                 QueryFilter::default().exclude_rigid_body(rigid_body_handle),
             )
-            .is_some()
-        {
-            self.choose_new_target(
-                renderer_state.rigid_body_set.clone(),
-                renderer_state.collider_set.clone(),
-                renderer_state.query_pipeline.clone(),
-                current_pos,
-            );
-            return;
-        }
+            .is_some();
 
-        // Ground detection using shape cast
-        let ground_shape = Cuboid::new(vector![0.1, 0.1, 0.1]);
-        let ground_pos = Isometry::new(
-            vector![current_pos.x, current_pos.y + 1.0, current_pos.z],
-            vector![0.0, 0.0, 0.0],
-        );
-        let ground_vel = vector![0.0, -2.0, 0.0];
+        // Now handle the logic and updates
+        if need_new_target || obstacle_detected {
+            self.choose_new_target(rigid_body_set, collider_set, query_pipeline, current_pos);
+            self.last_update = Instant::now();
 
-        let ground_options = ShapeCastOptions {
-            max_time_of_impact: 2.0,
-            target_distance: 0.0,
-            stop_at_penetration: false,
-            compute_impact_geometry_on_penetration: true,
-        };
-
-        if let Some((_, hit)) = renderer_state.query_pipeline.cast_shape(
-            &renderer_state.rigid_body_set,
-            &renderer_state.collider_set,
-            &ground_pos,
-            &ground_vel,
-            &ground_shape,
-            ground_options,
-            QueryFilter::default().exclude_rigid_body(rigid_body_handle),
-        ) {
-            // if let Some(normal) = hit.normal1 {
-            let normal = hit.normal1;
-            let slope_angle = normal.y.acos().to_degrees();
-
-            if slope_angle > self.max_slope {
-                self.choose_new_target(
-                    renderer_state.rigid_body_set.clone(),
-                    renderer_state.collider_set.clone(),
-                    renderer_state.query_pipeline.clone(),
-                    current_pos,
-                );
+            // If we hit an obstacle, return early
+            if obstacle_detected {
+                println!("obstacle detected");
                 return;
             }
-            // }
-        }
 
-        // Apply movement
-        let movement = direction * self.speed * dt;
-        rigid_body.set_linvel(vector![movement.x, movement.y, movement.z], true);
+            // Recalculate direction with new target
+            let direction = (self.target_position - current_pos).normalize();
+            let movement = direction * self.speed * dt;
+
+            // Apply the movement
+            if let Some(rigid_body) = rigid_body_set.get_mut(rigid_body_handle) {
+                // println!("apply movement");
+                let mut linvel = rigid_body.linvel().clone();
+                linvel.x = movement.x;
+                linvel.z = movement.z;
+                rigid_body.set_linvel(linvel, true);
+            }
+        } else {
+            // No new target needed, just apply movement
+
+            let movement = direction * self.speed * dt;
+            if let Some(rigid_body) = rigid_body_set.get_mut(rigid_body_handle) {
+                // println!("no new target needed, apply movement");
+                let mut linvel = rigid_body.linvel().clone();
+                linvel.x = movement.x;
+                linvel.z = movement.z;
+                rigid_body.set_linvel(linvel, true);
+            }
+        }
     }
 
     fn choose_new_target(
         &mut self,
-        rigid_body_set: RigidBodySet,
-        collider_set: ColliderSet,
-        physics: QueryPipeline,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &ColliderSet,
+        physics: &QueryPipeline,
         current_pos: Vec3,
     ) {
         let mut rng = rand::thread_rng();

@@ -320,6 +320,7 @@ impl Model {
                     .additional_mass(70.0) // Explicitly set mass (e.g., 70kg for a person)
                     .linear_damping(0.1)
                     .position(isometry)
+                    .locked_axes(LockedAxes::ROTATION_LOCKED_X | LockedAxes::ROTATION_LOCKED_Z)
                     .user_data(
                         Uuid::from_str(&model_component_id)
                             .expect("Couldn't extract uuid")

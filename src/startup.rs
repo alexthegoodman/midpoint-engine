@@ -2,6 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::core::PlayerCharacter::NPC;
 use crate::core::RendererState::{MouseState, Point, RendererState, WindowSize};
 use crate::core::Viewport::Viewport;
 use crate::handlers::{
