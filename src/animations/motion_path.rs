@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 /// Represents a single keyframe in a motion path
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct Keyframe {
     /// Time offset from the start of the animation
     pub time: Duration,
@@ -21,7 +21,7 @@ pub struct Keyframe {
 }
 
 /// Metadata that can be attached to keyframes for gameplay or animation purposes
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct KeyframeMetadata {
     // Animation events (footsteps, effects, etc)
     // pub events: Vec<AnimationEvent>,
@@ -34,7 +34,7 @@ pub struct KeyframeMetadata {
 }
 
 /// Types of easing functions available for interpolation
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub enum EasingType {
     Linear,
     EaseIn,
@@ -44,7 +44,7 @@ pub enum EasingType {
 }
 
 /// Complete motion path containing keyframes and metadata
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct MotionPath {
     /// Unique identifier for this path
     pub id: String,
@@ -61,7 +61,7 @@ pub struct MotionPath {
 }
 
 /// Metadata for the entire motion path
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct PathMetadata {
     /// Path category (walk, run, jump, etc)
     pub category: PathCategory,
@@ -74,7 +74,7 @@ pub struct PathMetadata {
 }
 
 /// Settings for blending between different motion paths
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct BlendSettings {
     /// Minimum blend time required
     pub min_blend_time: Duration,
@@ -87,7 +87,7 @@ pub struct BlendSettings {
 }
 
 /// Mask for controlling which attributes should be blended
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct BlendMask {
     pub blend_position: bool,
     pub blend_rotation: bool,
@@ -96,7 +96,7 @@ pub struct BlendMask {
 }
 
 /// Categories of motion paths
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub enum PathCategory {
     Locomotion,
     Action,
@@ -150,7 +150,7 @@ pub struct MotionPathManager {
 // }
 
 /// Custom error type for motion path operations
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub enum PathError {
     PathNotFound,
     InvalidBlendOperation,
@@ -159,7 +159,7 @@ pub enum PathError {
 }
 
 /// Represents a currently playing motion path
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 struct ActivePath {
     path: MotionPath,
     current_time: Duration,
@@ -168,7 +168,7 @@ struct ActivePath {
 }
 
 /// Represents an active blend between two paths
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 struct BlendOperation {
     source_path: String,
     target_path: String,

@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+use crate::animations::{
+    motion_path::MotionPath,
+    skeleton::{SkeletonAssemblyConfig, SkeletonPart},
+};
+
 #[derive(Hash, Eq, Clone, PartialEq, Serialize, Deserialize, Default, Debug)]
 pub struct File {
     pub id: String,
@@ -75,4 +80,7 @@ pub struct SavedState {
     pub landscapes: Option<Vec<LandscapeData>>,
     pub textures: Option<Vec<File>>,
     pub levels: Option<Vec<LevelData>>,
+    pub skeleton_parts: Vec<SkeletonPart>,
+    pub skeletons: Vec<SkeletonAssemblyConfig>,
+    pub motion_paths: Vec<MotionPath>,
 }

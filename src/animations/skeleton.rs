@@ -4,7 +4,7 @@ use std::collections::HashMap;
 // NOTE: these types will be fed to AI when generating SkeletonParts
 
 /// Represents the orientation and rotation order for a joint
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct JointOrientation {
     /// Default rotation as a quaternion
     pub default_rotation: [f32; 4], // Quat
@@ -15,7 +15,7 @@ pub struct JointOrientation {
 }
 
 /// Represents constraints on joint movement
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct JointConstraints {
     /// Minimum rotation angles in degrees for each axis
     pub rotation_min: [f32; 3], // Vec3
@@ -28,7 +28,7 @@ pub struct JointConstraints {
 }
 
 /// Represents a single bone/joint in the skeleton
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct Joint {
     /// Unique identifier for the joint
     pub id: String,
@@ -55,7 +55,7 @@ impl Joint {
 }
 
 /// Categorizes joints by their purpose
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub enum JointType {
     /// Standard skeletal joint
     Standard,
@@ -74,7 +74,7 @@ pub enum JointType {
 }
 
 /// Represents an IK chain in the skeleton
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct IKChain {
     /// Unique identifier for the chain
     pub id: String,
@@ -93,7 +93,7 @@ pub struct IKChain {
 }
 
 /// Settings for IK chain behavior
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct IKSettings {
     /// Whether the chain supports stretching
     pub allow_stretch: bool,
@@ -106,7 +106,7 @@ pub struct IKSettings {
 }
 
 // /// Complete skeleton definition
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct Skeleton {
     /// Unique identifier for the skeleton
     pub id: String,
@@ -119,7 +119,7 @@ pub struct Skeleton {
 }
 
 /// Configuration for a specific level of detail
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct LodConfig {
     /// LOD level (0 is highest detail)
     pub level: u32,
@@ -132,7 +132,7 @@ pub struct LodConfig {
 }
 
 /// Represents connection points where skeleton parts can be attached
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct AttachPoint {
     /// Unique identifier for this attachment point
     pub id: String,
@@ -149,7 +149,7 @@ pub struct AttachPoint {
 }
 
 /// A discrete part of a skeleton that can be assembled with others
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct SkeletonPart {
     /// Unique identifier for this part
     pub id: String,
@@ -172,14 +172,14 @@ pub struct SkeletonPart {
 }
 
 /// Configuration for assembling skeleton parts
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct SkeletonAssemblyConfig {
     /// Unique identifier for this assembly
     pub id: String,
     /// Display name of the assembled skeleton
     pub name: String,
     /// The root part to start assembly from
-    pub root_part_id: String,
+    pub root_part_id: Option<String>,
     /// Connections between parts
     pub connections: Vec<PartConnection>,
     /// Global settings for the assembled skeleton
@@ -187,28 +187,28 @@ pub struct SkeletonAssemblyConfig {
 }
 
 /// Defines how two skeleton parts connect
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct PartConnection {
     /// ID of the parent part
-    pub parent_part_id: String,
+    pub parent_part_id: Option<String>,
     /// ID of the child part
-    pub child_part_id: String,
+    pub child_part_id: Option<String>,
     /// ID of the attachment point on the parent
-    pub parent_attach_point: String,
+    pub parent_attach_point: Option<String>,
     /// ID of the attachment point on the child
-    pub child_attach_point: String,
+    pub child_attach_point: Option<String>,
     /// Optional transform adjustments
     pub transform_offset: Option<TransformOffset>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct TransformOffset {
     pub position: [f32; 3],
     pub rotation: [f32; 4],
     pub scale: [f32; 3],
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct AssemblySettings {
     /// How to handle naming conflicts
     pub naming_strategy: NamingStrategy,
@@ -217,10 +217,15 @@ pub struct AssemblySettings {
     /// Whether to auto-generate missing IK chains
     pub generate_missing_ik: bool,
     /// LOD settings for the assembled skeleton
-    pub lod_settings: LodConfig,
+    pub lod_settings: AssmeblyLodConfig,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
+pub struct AssmeblyLodConfig {
+    pub use_lod_configs: bool,
+}
+
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub enum NamingStrategy {
     /// Add prefix based on part ID
     Prefix,
