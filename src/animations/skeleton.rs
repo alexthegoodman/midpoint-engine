@@ -48,6 +48,12 @@ pub struct Joint {
     pub metadata: HashMap<String, String>,
 }
 
+impl Joint {
+    pub fn set_local_position(&mut self, position: [f32; 3]) {
+        self.local_position = position;
+    }
+}
+
 /// Categorizes joints by their purpose
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum JointType {
@@ -99,21 +105,15 @@ pub struct IKSettings {
     pub fk_blend: f32,
 }
 
-/// Complete skeleton definition
+// /// Complete skeleton definition
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Skeleton {
     /// Unique identifier for the skeleton
     pub id: String,
-    /// Display name of the skeleton
-    pub name: String,
-    /// Version of the skeleton data format
-    pub version: String,
-    /// All joints in the skeleton
-    pub joints: Vec<Joint>,
-    /// IK chain definitions
-    pub ik_chains: Vec<IKChain>,
-    /// Level of detail configurations
-    pub lod_configs: Vec<LodConfig>,
+    /// load the part assembly
+    pub assembly_config: SkeletonAssemblyConfig,
+    /// load the configured motion paths
+    // pub motion_paths: Vec<MotionPath>;
     /// Engine-specific metadata
     pub metadata: HashMap<String, String>,
 }
