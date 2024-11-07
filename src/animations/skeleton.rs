@@ -34,7 +34,7 @@ pub struct Joint {
     /// ID of the parent joint (None for root)
     pub parent_id: Option<String>,
     /// Local position relative to parent
-    pub local_position: [f32; 3], // Vec3
+    pub world_position: [f32; 3], // Vec3
     /// Optional movement constraints
     pub constraints: Option<JointConstraints>,
 }
