@@ -71,7 +71,6 @@ const INDICES: &[u16] = &[
 pub struct Cube {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    // uniform_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub transform: Transform,
     pub index_count: u32,
@@ -112,7 +111,6 @@ impl Cube {
         Self {
             vertex_buffer,
             index_buffer,
-            // uniform_buffer,
             bind_group,
             transform: Transform::new(
                 Vector3::new(0.0, 0.0, 0.0),

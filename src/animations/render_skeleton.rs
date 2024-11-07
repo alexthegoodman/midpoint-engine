@@ -6,52 +6,97 @@ use wgpu::util::DeviceExt;
 use crate::{
     core::Transform::{matrix4_to_raw_array, Transform},
     handlers::Vertex,
+    shapes::Sphere::Sphere,
 };
 
 use super::skeleton::{Joint, SkeletonPart};
 
-// Vertices for a pyramid
+// // Vertices for a pyramid
+// const VERTICES: &[Vertex] = &[
+//     Vertex {
+//         position: [0.0, 1.0, 0.0],
+//         normal: [0.0, 0.0, 0.0],
+//         tex_coords: [0.0, 0.0],
+//         color: [1.0, 0.0, 0.0],
+//     }, // Apex
+//     Vertex {
+//         position: [-1.0, -1.0, -1.0],
+//         normal: [0.0, 0.0, 0.0],
+//         tex_coords: [0.0, 0.0],
+//         color: [0.0, 1.0, 0.0],
+//     }, // Base vertices
+//     Vertex {
+//         position: [1.0, -1.0, -1.0],
+//         normal: [0.0, 0.0, 0.0],
+//         tex_coords: [0.0, 0.0],
+//         color: [0.0, 0.0, 1.0],
+//     },
+//     Vertex {
+//         position: [1.0, -1.0, 1.0],
+//         normal: [0.0, 0.0, 0.0],
+//         tex_coords: [0.0, 0.0],
+//         color: [1.0, 1.0, 0.0],
+//     },
+//     Vertex {
+//         position: [-1.0, -1.0, 1.0],
+//         normal: [0.0, 0.0, 0.0],
+//         tex_coords: [0.0, 0.0],
+//         color: [0.0, 1.0, 1.0],
+//     },
+// ];
+
+// // Indices for a pyramid
+// const INDICES: &[u16] = &[
+//     0, 1, 2, // Side 1
+//     0, 2, 3, // Side 2
+//     0, 3, 4, // Side 3
+//     0, 4, 1, // Side 4
+//     1, 3, 2, // Base 1
+//     1, 4, 3, // Base 2
+// ];
+
+// NOTE: these vertices extend across just 1 unit of space
+// Vertices for a pyramid pointing along -Y axis
 const VERTICES: &[Vertex] = &[
+    // Base vertices (at y=0)
     Vertex {
-        position: [0.0, 1.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
+        position: [-0.5, 0.0, -0.5],
+        normal: [-0.5, 0.5, -0.5],
         tex_coords: [0.0, 0.0],
-        color: [1.0, 0.0, 0.0],
-    }, // Apex
-    Vertex {
-        position: [-1.0, -1.0, -1.0],
-        normal: [0.0, 0.0, 0.0],
-        tex_coords: [0.0, 0.0],
-        color: [0.0, 1.0, 0.0],
-    }, // Base vertices
-    Vertex {
-        position: [1.0, -1.0, -1.0],
-        normal: [0.0, 0.0, 0.0],
-        tex_coords: [0.0, 0.0],
-        color: [0.0, 0.0, 1.0],
+        color: [1.0, 0.0, 1.0],
     },
     Vertex {
-        position: [1.0, -1.0, 1.0],
-        normal: [0.0, 0.0, 0.0],
-        tex_coords: [0.0, 0.0],
+        position: [0.5, 0.0, -0.5],
+        normal: [0.5, 0.5, -0.5],
+        tex_coords: [1.0, 0.0],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex {
+        position: [0.5, 0.0, 0.5],
+        normal: [0.5, 0.5, 0.5],
+        tex_coords: [1.0, 1.0],
         color: [1.0, 1.0, 0.0],
     },
     Vertex {
-        position: [-1.0, -1.0, 1.0],
-        normal: [0.0, 0.0, 0.0],
-        tex_coords: [0.0, 0.0],
-        color: [0.0, 1.0, 1.0],
+        position: [-0.5, 0.0, 0.5],
+        normal: [-0.5, 0.5, 0.5],
+        tex_coords: [0.0, 1.0],
+        color: [1.0, 0.0, 0.0],
+    },
+    // Tip vertex (at y=-1 instead of y=1)
+    Vertex {
+        position: [0.0, -1.0, 0.0],
+        normal: [0.0, -1.0, 0.0],
+        tex_coords: [0.5, 0.5],
+        color: [1.0, 1.0, 0.0],
     },
 ];
 
-// Indices for a pyramid
+// Indices for a pyramid (reversed winding order for correct face culling)
 const INDICES: &[u16] = &[
-    0, 1, 2, // Side 1
-    0, 2, 3, // Side 2
-    0, 3, 4, // Side 3
-    0, 4, 1, // Side 4
-    1, 3, 2, // Base 1
-    1, 4, 3, // Base 2
+    // Base
+    0, 2, 1, 0, 3, 2, // Sides
+    0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4,
 ];
 
 // #[derive(Clone)]
@@ -72,6 +117,8 @@ pub struct BoneSegment {
 
     pub length: f32,
     pub color: [f32; 4],
+
+    pub joint_sphere: Sphere,
 }
 
 impl BoneSegment {
@@ -83,13 +130,14 @@ impl BoneSegment {
         end_joint_id: String,
         start_pos: Point3<f32>,
         end_pos: Point3<f32>,
+        parent_rotation: Option<Vector3<f32>>,
     ) -> Self {
         // Calculate bone properties from joint positions
         let bone_vector = end_pos - start_pos;
         let length = bone_vector.magnitude();
 
         // Calculate rotation to align bone with direction vector
-        let rotation = Self::calculate_bone_rotation(&bone_vector);
+        let rotation = Self::calculate_local_bone_rotation(&bone_vector);
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("BoneSegment Vertex Buffer"),
@@ -107,7 +155,7 @@ impl BoneSegment {
         let raw_matrix = matrix4_to_raw_array(&empty_buffer);
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Pyramid Uniform Buffer"),
+            label: Some("BoneSegment Uniform Buffer"),
             contents: bytemuck::cast_slice(&raw_matrix),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
@@ -126,11 +174,14 @@ impl BoneSegment {
         // Scale x and z are small to make thin bones, y is length
         // Rotation aligns bone with direction vector
         let transform = Transform::new(
-            start_pos.coords,               // position at start joint
-            rotation,                       // rotation to align with bone direction
-            Vector3::new(0.1, length, 0.1), // scale to create bone shape
+            start_pos.coords,                 // position at start joint
+            rotation,                         // rotation to align with bone direction
+            Vector3::new(0.05, length, 0.05), // scale to create bone shape
             uniform_buffer,
         );
+
+        let mut joint_sphere = Sphere::new(device, bind_group_layout, 0.05, 16, 16);
+        joint_sphere.transform.position = start_pos.coords;
 
         Self {
             start_joint_id,
@@ -142,15 +193,21 @@ impl BoneSegment {
             index_buffer,
             num_indices: INDICES.len() as u32,
             bind_group,
+            joint_sphere,
         }
     }
 
     /// Updates the bone transform based on new joint positions
-    pub fn update_from_joint_positions(&mut self, start_pos: Point3<f32>, end_pos: Point3<f32>) {
+    pub fn update_from_joint_positions(
+        &mut self,
+        start_pos: Point3<f32>,
+        end_pos: Point3<f32>,
+        parent_rotation: Option<Vector3<f32>>,
+    ) {
         let bone_vector = end_pos - start_pos;
         let length = bone_vector.magnitude();
 
-        let rotation = Self::calculate_bone_rotation(&bone_vector);
+        let rotation = Self::calculate_local_bone_rotation(&bone_vector);
 
         self.transform.update_position(start_pos.coords.into());
         self.transform.update_rotation(rotation.into());
@@ -158,10 +215,10 @@ impl BoneSegment {
         self.length = length;
     }
 
-    /// Calculates rotation to align bone with direction vector
-    fn calculate_bone_rotation(bone_vector: &Vector3<f32>) -> Vector3<f32> {
+    // /// Calculates rotation to align bone with direction vector
+    fn calculate_local_bone_rotation(bone_vector: &Vector3<f32>) -> Vector3<f32> {
         // Default bone direction (assuming bone model points up along Y axis)
-        let default_direction = Vector3::new(0.0, 1.0, 0.0);
+        let default_direction = Vector3::new(0.0, -1.0, 0.0);
 
         // If bone vector is zero or nearly zero, return no rotation
         if bone_vector.magnitude() < 1e-6 {
@@ -177,6 +234,88 @@ impl BoneSegment {
 
         // Convert rotation matrix to euler angles
         let euler = rotation.euler_angles();
+        Vector3::new(euler.0, euler.1, euler.2)
+    }
+
+    // fn calculate_bone_rotation(bone_vector: &Vector3<f32>) -> Vector3<f32> {
+    //     // Default bone direction (assuming bone model points up along Y axis)
+    //     let default_direction = Vector3::new(0.0, 1.0, 0.0);
+
+    //     // If bone vector is zero or nearly zero, return no rotation
+    //     if bone_vector.magnitude() < 1e-6 {
+    //         return Vector3::zeros();
+    //     }
+
+    //     // Get unit vector in bone direction
+    //     let bone_direction = bone_vector.normalize();
+
+    //     // First calculate the axis of rotation (cross product)
+    //     let rotation_axis = default_direction.cross(&bone_direction);
+
+    //     if rotation_axis.magnitude() < 1e-6 {
+    //         // Vectors are parallel or anti-parallel
+    //         if bone_direction.dot(&default_direction) < 0.0 {
+    //             // Anti-parallel case - rotate 180 degrees around X axis
+    //             return Vector3::new(std::f32::consts::PI, 0.0, 0.0);
+    //         } else {
+    //             // Parallel case - no rotation needed
+    //             return Vector3::zeros();
+    //         }
+    //     }
+
+    //     // Calculate the angle between vectors
+    //     let angle = default_direction.dot(&bone_direction).acos();
+
+    //     // Create rotation around the axis
+    //     let axis_angle = rotation_axis.normalize() * angle;
+
+    //     // Convert to euler angles - this might give more stable results
+    //     let rotation =
+    //         Rotation3::from_axis_angle(&UnitVector3::new_normalize(rotation_axis), angle);
+    //     let euler = rotation.euler_angles();
+
+    //     Vector3::new(euler.0, euler.1, euler.2)
+    // }
+
+    fn calculate_bone_rotation(
+        bone_vector: &Vector3<f32>,
+        parent_rotation: Option<Vector3<f32>>,
+    ) -> Vector3<f32> {
+        // If bone vector is zero or nearly zero, return parent rotation or zero
+        if bone_vector.magnitude() < 1e-6 {
+            return parent_rotation.unwrap_or_else(Vector3::zeros);
+        }
+
+        // Get direction from parent's orientation if available
+        let parent_transform = if let Some(parent_rot) = parent_rotation {
+            Rotation3::from_euler_angles(parent_rot.x, parent_rot.y, parent_rot.z)
+        } else {
+            // If no parent rotation, use identity (vertical orientation)
+            Rotation3::identity()
+        };
+
+        println!("parent_transform {:?}", parent_transform);
+
+        // Transform the bone vector into parent's local space
+        let local_direction = parent_transform.inverse() * bone_vector.normalize();
+
+        // Calculate rotation in parent's local space
+        let local_rotation = if local_direction.magnitude() > 1e-6 {
+            let default_direction = Vector3::new(0.0, 1.0, 0.0);
+            Rotation3::rotation_between(&default_direction, &local_direction)
+                .unwrap_or(Rotation3::identity())
+        } else {
+            Rotation3::identity()
+        };
+
+        println!("local_rotation {:?}", local_rotation);
+
+        // Combine parent rotation with local rotation
+        let final_rotation = parent_transform * local_rotation;
+        let euler = final_rotation.euler_angles();
+
+        println!("euler {:?}", euler);
+
         Vector3::new(euler.0, euler.1, euler.2)
     }
 }
@@ -202,24 +341,24 @@ impl SkeletonRenderPart {
         }
     }
 
-    /// Updates bone transforms based on current joint positions
-    pub fn update_bones(
-        &mut self,
-        joint_positions: &HashMap<String, Point3<f32>>,
-        queue: &wgpu::Queue,
-    ) {
-        for bone in &mut self.bones {
-            if let (Some(start_pos), Some(end_pos)) = (
-                joint_positions.get(&bone.start_joint_id),
-                joint_positions.get(&bone.end_joint_id),
-            ) {
-                // Update bone transform based on new joint positions
-                bone.update_from_joint_positions(*start_pos, *end_pos);
-                // Update GPU buffer
-                bone.transform.update_uniform_buffer(queue);
-            }
-        }
-    }
+    // /// Updates bone transforms based on current joint positions
+    // pub fn update_bones(
+    //     &mut self,
+    //     joint_positions: &HashMap<String, Point3<f32>>,
+    //     queue: &wgpu::Queue,
+    // ) {
+    //     for bone in &mut self.bones {
+    //         if let (Some(start_pos), Some(end_pos)) = (
+    //             joint_positions.get(&bone.start_joint_id),
+    //             joint_positions.get(&bone.end_joint_id),
+    //         ) {
+    //             // Update bone transform based on new joint positions
+    //             bone.update_from_joint_positions(*start_pos, *end_pos, parent_rotation);
+    //             // Update GPU buffer
+    //             bone.transform.update_uniform_buffer(queue);
+    //         }
+    //     }
+    // }
 
     /// Creates bone segments from joint hierarchy
     pub fn create_bone_segments(
@@ -228,10 +367,17 @@ impl SkeletonRenderPart {
         bind_group_layout: &wgpu::BindGroupLayout,
         joints: Vec<Joint>,
         joint_positions: &HashMap<String, Point3<f32>>,
+        joint_rotations: &HashMap<String, Vector3<f32>>,
     ) {
         let mut bones = Vec::new();
 
         for joint in joints {
+            let parent_rotation = joint
+                .parent_id
+                .as_ref()
+                .and_then(|id| joint_rotations.get(id))
+                .copied();
+
             if let Some(parent_id) = &joint.parent_id {
                 if let (Some(start_pos), Some(end_pos)) = (
                     joint_positions.get(parent_id),
@@ -244,6 +390,7 @@ impl SkeletonRenderPart {
                         joint.id.clone(),
                         *start_pos,
                         *end_pos,
+                        parent_rotation,
                     );
                     bones.push(bone);
                 }
@@ -253,4 +400,46 @@ impl SkeletonRenderPart {
         // bones
         self.bones = bones;
     }
+}
+
+pub fn create_joint_rotations(
+    joints: Vec<Joint>,
+    joint_positions: &HashMap<String, Point3<f32>>,
+) -> HashMap<String, Vector3<f32>> {
+    let mut joint_rotations: HashMap<String, Vector3<f32>> = HashMap::new();
+
+    for joint in joints.iter() {
+        if let Some(parent_id) = &joint.parent_id {
+            let parent_joint = joints
+                .iter()
+                .find(|pj| pj.id == *parent_id)
+                .expect("Couldn't find parent joint");
+
+            if let Some(parent_parent_id) = &parent_joint.parent_id {
+                // let parent_parent_joint = joints.iter().find(|pj| pj.id == parent_parent_id).expect("Couldn't find parent parent joint");
+
+                if let (Some(parent_pos), Some(parent_parent_pos)) = (
+                    joint_positions.get(parent_id),
+                    joint_positions.get(parent_parent_id),
+                ) {
+                    // Calculate direction vector from parent to current joint
+                    let bone_vector = parent_pos - parent_parent_pos;
+
+                    // Calculate rotation needed to align with this direction
+                    // (using our previous calculate_bone_rotation logic)
+                    let rotation = BoneSegment::calculate_local_bone_rotation(&bone_vector);
+
+                    joint_rotations.insert(joint.id.clone(), rotation);
+                }
+            } else {
+                // Root joint - could use default orientation or calculate based on children
+                joint_rotations.insert(joint.id.clone(), Vector3::zeros());
+            }
+        } else {
+            // Root joint - could use default orientation or calculate based on children
+            joint_rotations.insert(joint.id.clone(), Vector3::zeros());
+        }
+    }
+
+    joint_rotations
 }

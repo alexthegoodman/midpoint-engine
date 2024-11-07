@@ -4,15 +4,12 @@ use std::collections::HashMap;
 // NOTE: these types will be fed to AI when generating SkeletonParts
 
 /// Represents the orientation and rotation order for a joint
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-pub struct JointOrientation {
-    /// Default rotation as a quaternion
-    pub default_rotation: [f32; 4], // Quat
-    /// Rotation order (e.g., "XYZ", "ZXY")
-    pub rotation_order: String,
-    /// Whether this joint's rotation should be mirrored when retargeting
-    pub mirror_rotation: bool,
-}
+// #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+// pub struct JointOrientation {
+//     /// Default rotation as a quaternion
+//     pub default_rotation: [f32; 4], // Quat
+//     /// Rotation order is XYZ
+// }
 
 /// Represents constraints on joint movement
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
@@ -38,14 +35,8 @@ pub struct Joint {
     pub parent_id: Option<String>,
     /// Local position relative to parent
     pub local_position: [f32; 3], // Vec3
-    /// Local orientation
-    pub orientation: JointOrientation,
     /// Optional movement constraints
     pub constraints: Option<JointConstraints>,
-    /// Joint type for special behavior
-    pub joint_type: JointType,
-    /// Additional metadata for engine-specific features
-    pub metadata: HashMap<String, String>,
 }
 
 // impl Joint {
@@ -55,23 +46,23 @@ pub struct Joint {
 // }
 
 /// Categorizes joints by their purpose
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-pub enum JointType {
-    /// Standard skeletal joint
-    Standard,
-    /// Helper joint for better deformation
-    Helper,
-    /// Joint for attaching equipment/props
-    Attachment,
-    /// Joint for physics simulation
-    Physics,
-    /// Joint specifically for twist distribution
-    Twist,
-    /// Specialized joint for facial animation
-    Facial,
-    /// Control joint for IK systems
-    IKControl,
-}
+// #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+// pub enum JointType {
+//     /// Standard skeletal joint
+//     Standard,
+//     /// Helper joint for better deformation
+//     Helper,
+//     /// Joint for attaching equipment/props
+//     Attachment,
+//     /// Joint for physics simulation
+//     Physics,
+//     /// Joint specifically for twist distribution
+//     Twist,
+//     /// Specialized joint for facial animation
+//     Facial,
+//     /// Control joint for IK systems
+//     IKControl,
+// }
 
 /// Represents an IK chain in the skeleton
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
@@ -112,10 +103,8 @@ pub struct Skeleton {
     pub id: String,
     /// load the part assembly
     pub assembly_config: SkeletonAssemblyConfig,
-    /// load the configured motion paths
+    // // load the configured motion paths
     // pub motion_paths: Vec<MotionPath>;
-    /// Engine-specific metadata
-    pub metadata: HashMap<String, String>,
 }
 
 /// Configuration for a specific level of detail
@@ -136,16 +125,12 @@ pub struct LodConfig {
 pub struct AttachPoint {
     /// Unique identifier for this attachment point
     pub id: String,
-    /// The type of joint that can connect here
-    pub compatible_types: Vec<String>,
     /// Local position relative to the parent joint
     pub local_position: [f32; 3],
     /// Local rotation as quaternion
     pub local_rotation: [f32; 4],
     /// Optional constraints for the attachment
     pub constraints: Option<JointConstraints>,
-    /// Metadata for special handling
-    pub metadata: HashMap<String, String>,
 }
 
 /// A discrete part of a skeleton that can be assembled with others
@@ -155,10 +140,6 @@ pub struct SkeletonPart {
     pub id: String,
     /// Display name of the part
     pub name: String,
-    /// Category of this part (e.g., "arm", "leg", "head")
-    pub part_type: String,
-    /// Version of this part
-    pub version: String,
     /// The joints that make up this part
     pub joints: Vec<Joint>,
     /// IK chains contained in this part
@@ -167,8 +148,6 @@ pub struct SkeletonPart {
     pub attach_points: Vec<AttachPoint>,
     /// Points where other parts can be attached to this one
     pub accept_points: Vec<AttachPoint>,
-    /// Metadata for the part
-    pub metadata: HashMap<String, String>,
 }
 
 /// Configuration for assembling skeleton parts
@@ -210,12 +189,6 @@ pub struct TransformOffset {
 
 #[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct AssemblySettings {
-    /// How to handle naming conflicts
-    pub naming_strategy: NamingStrategy,
-    /// Whether to validate connections during assembly
-    pub validate_connections: bool,
-    /// Whether to auto-generate missing IK chains
-    pub generate_missing_ik: bool,
     /// LOD settings for the assembled skeleton
     pub lod_settings: AssmeblyLodConfig,
 }
@@ -225,14 +198,14 @@ pub struct AssmeblyLodConfig {
     pub use_lod_configs: bool,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
-pub enum NamingStrategy {
-    /// Add prefix based on part ID
-    Prefix,
-    /// Add suffix based on part ID
-    Suffix,
-    /// Use GUID-style unique identifiers
-    Guid,
-    /// Keep original names, error on conflicts
-    Strict,
-}
+// #[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
+// pub enum NamingStrategy {
+//     /// Add prefix based on part ID
+//     Prefix,
+//     /// Add suffix based on part ID
+//     Suffix,
+//     /// Use GUID-style unique identifiers
+//     Guid,
+//     /// Keep original names, error on conflicts
+//     Strict,
+// }
