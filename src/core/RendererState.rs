@@ -134,6 +134,7 @@ pub struct RendererState {
     pub ray_intersection: Option<RapierPoint<f32>>,
     pub ray_component_id: Option<Uuid>,
     pub dragging_gizmo: bool,
+    pub gizmo_drag_axis: Option<u8>,
 
     pub last_movement_time: Option<Instant>,
     pub last_frame_time: Option<Instant>,
@@ -303,120 +304,9 @@ impl RendererState {
             last_movement_time: None,
             last_frame_time: None,
             npcs: Vec::new(),
+            gizmo_drag_axis: None,
         }
     }
-
-    // pub fn step_physics_pipeline(&mut self) {
-    //     // Calculate delta time
-    //     let now = std::time::Instant::now();
-    //     let dt = if self.last_frame_time.is_some() {
-    //         (now - self.last_frame_time.expect("Couldn't get time")).as_secs_f32()
-    //     } else {
-    //         0.0
-    //     };
-    //     self.last_frame_time = Some(now);
-
-    //     // println!("processing physics...");
-    //     let physics_hooks = ();
-    //     let event_handler = ();
-
-    //     self.physics_pipeline.step(
-    //         &self.gravity,
-    //         &self.integration_parameters,
-    //         &mut self.island_manager,
-    //         &mut self.broad_phase,
-    //         &mut self.narrow_phase,
-    //         &mut self.rigid_body_set,
-    //         &mut self.collider_set,
-    //         &mut self.impulse_joint_set,
-    //         &mut self.multibody_joint_set,
-    //         &mut self.ccd_solver,
-    //         Some(&mut self.query_pipeline),
-    //         &physics_hooks,
-    //         &event_handler,
-    //     );
-
-    //     // update visuals accordingly
-    //     for (rigid_body_handle, rigid_body) in self.rigid_body_set.iter() {
-    //         // println!("rigid body");
-    //         // Get the physics position
-    //         let physics_position = rigid_body.position();
-
-    //         // Convert Rapier's Isometry as needed
-    //         let position = physics_position.translation.vector;
-    //         let rotation = physics_position.rotation;
-    //         let euler = rotation.euler_angles(); // Returns (roll, pitch, yaw)
-    //         let component_id = Uuid::from_u128(rigid_body.user_data);
-
-    //         let instance_model_data = self
-    //             .models
-    //             .iter_mut()
-    //             .find(|m| m.id == component_id.to_string());
-
-    //         let instance_npc_data = self
-    //             .npcs
-    //             .iter_mut()
-    //             .find(|m| m.model_id == component_id.to_string());
-
-    //         // Update camera to follow physics body
-    //         if let Some(rb_handle) = self.player_character.movement_rigid_body_handle {
-    //             if let Some(rb) = self.rigid_body_set.get(rb_handle) {
-    //                 let pos = rb.translation();
-
-    //                 let mut camera = get_camera();
-    //                 camera.position = Point3::new(pos.x, pos.y + 0.9, pos.z); // Add eye height
-    //             }
-    //         }
-
-    //         if instance_model_data.is_some() {
-    //             // println!("Processing model physics!");
-    //             let instance_model_data =
-    //                 instance_model_data.expect("Couldn't get instance_model_data");
-
-    //             instance_model_data.meshes.iter_mut().for_each(|mesh| {
-    //                 mesh.transform
-    //                     .update_position([position.x, position.y, position.z]);
-    //                 mesh.transform.update_rotation([euler.0, euler.1, euler.2]);
-    //             });
-
-    //             if instance_npc_data.is_some() {
-    //                 let instance_npc_data =
-    //                     instance_npc_data.expect("Couldn't get instance_npc_data");
-
-    //                 let mut first_mesh = instance_model_data.meshes.get_mut(0).expect("Test");
-
-    //                 instance_npc_data.test_behavior.update(
-    //                     // renderer_state,
-    //                     &mut self.rigid_body_set,
-    //                     &self.collider_set,
-    //                     &self.query_pipeline,
-    //                     first_mesh.rigid_body_handle.expect("Couldn't get it"), // TODO / FIX assumes 1
-    //                     &first_mesh.rapier_collider,
-    //                     &mut first_mesh.transform,
-    //                     dt,
-    //                 );
-    //             }
-    //         }
-
-    //         // landscapes are static anyway?
-    //         let instance_landscape_data = self
-    //             .landscapes
-    //             .iter_mut()
-    //             .find(|m| m.id == component_id.to_string());
-
-    //         if instance_landscape_data.is_some() {
-    //             let mut instance_landscape_data =
-    //                 instance_landscape_data.expect("Couldn't get instance_landscape_data");
-
-    //             instance_landscape_data
-    //                 .transform
-    //                 .update_position([position.x, position.y, position.z]);
-    //             instance_landscape_data
-    //                 .transform
-    //                 .update_rotation([euler.0, euler.1, euler.2]);
-    //         }
-    //     }
-    // }
 
     pub fn step_physics_pipeline(&mut self) {
         // Calculate delta time
@@ -570,6 +460,11 @@ impl RendererState {
         ray
     }
 
+    // pub fn update_gizmo_state(&mut self, dragging: bool, axis: u8) {
+    //     self.dragging_gizmo = true;
+    //     self.gizmo_drag_axis = Some(axis);
+    // }
+
     pub fn update_rapier(&mut self) {
         self.query_pipeline.update(&self.collider_set);
     }
@@ -603,10 +498,10 @@ impl RendererState {
                 .get_mut(arrow.collider_handle.expect("Couldn't get collider handle"))
             {
                 collider.set_position(isometry);
-                println!(
-                    "Updated collider for axis {}: pos={:?}",
-                    arrow.axis, translation
-                );
+                // println!(
+                //     "Updated collider for axis {}: pos={:?}",
+                //     arrow.axis, translation
+                // );
             }
         });
     }
