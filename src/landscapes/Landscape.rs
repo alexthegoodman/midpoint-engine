@@ -31,6 +31,7 @@ pub struct Landscape {
     pub rapier_rigidbody: RigidBody,
     pub collider_handle: Option<ColliderHandle>,
     pub rigid_body_handle: Option<RigidBodyHandle>,
+    pub heights: nalgebra::DMatrix<f32>,
 }
 
 impl Landscape {
@@ -298,6 +299,7 @@ impl Landscape {
             rapier_rigidbody: ground_rigid_body,
             collider_handle: None,
             rigid_body_handle: None,
+            heights: data.rapier_heights.clone(),
         }
     }
 

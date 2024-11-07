@@ -4,12 +4,16 @@ use rapier3d::math::Point as RapierPoint;
 use rapier3d::prelude::*;
 use rapier3d::prelude::{ColliderSet, QueryPipeline, RigidBodySet};
 use uuid::Uuid;
+use wgpu::BindGroupLayout;
 
+use crate::animations::render_skeleton::SkeletonRenderPart;
+use crate::animations::skeleton::Joint;
 use crate::handlers::get_camera;
 use crate::{
     core::Texture::Texture,
     helpers::saved_data::{ComponentData, ComponentKind},
 };
+use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -86,6 +90,7 @@ pub struct RendererState {
     pub grids: Vec<Grid>,
     pub models: Vec<Model>,
     pub landscapes: Vec<Landscape>,
+    pub skeleton_parts: Vec<SkeletonRenderPart>, // will contain buffers and the like
 
     // wgpu
     pub model_bind_group_layout: Arc<wgpu::BindGroupLayout>,
@@ -191,6 +196,8 @@ impl RendererState {
 
         let mut landscapes = Vec::new();
 
+        let mut skeleton_parts = Vec::new();
+
         // let gizmo = TestTransformGizmo::new(
         //     &device,
         //     camera,
@@ -246,6 +253,7 @@ impl RendererState {
             grids,
             models,
             landscapes,
+            skeleton_parts,
 
             // device,
             // queue,
@@ -888,6 +896,26 @@ impl RendererState {
                 &mask,
             );
         }
+    }
+
+    pub fn add_skeleton_part(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        partComponentId: &String,
+        position: [f32; 3],
+        joints: Vec<Joint>,
+        joint_positions: &HashMap<String, Point3<f32>>,
+    ) {
+        let mut skeleton_part = SkeletonRenderPart::new(partComponentId.to_string());
+        skeleton_part.create_bone_segments(
+            device,
+            &self.model_bind_group_layout,
+            joints,
+            joint_positions,
+        );
+
+        self.skeleton_parts.push(skeleton_part);
     }
 }
 

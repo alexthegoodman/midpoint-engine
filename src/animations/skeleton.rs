@@ -48,11 +48,11 @@ pub struct Joint {
     pub metadata: HashMap<String, String>,
 }
 
-impl Joint {
-    pub fn set_local_position(&mut self, position: [f32; 3]) {
-        self.local_position = position;
-    }
-}
+// impl Joint {
+//     pub fn set_local_position(&mut self, position: [f32; 3]) {
+//         self.local_position = position;
+//     }
+// }
 
 /// Categorizes joints by their purpose
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]

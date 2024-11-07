@@ -10,14 +10,17 @@ use winit::{
 };
 
 use bytemuck::{Pod, Zeroable};
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::{cell::RefCell, collections::HashMap};
 
 use super::shapes::Cube::Cube;
-use crate::{core::SimpleCamera::SimpleCamera, helpers::landscapes::read_landscape_texture};
+use crate::{
+    animations::skeleton::Joint, core::SimpleCamera::SimpleCamera,
+    helpers::landscapes::read_landscape_texture,
+};
 use crate::{
     core::{Grid::Grid, RendererState::RendererState},
     helpers::landscapes::read_landscape_mask,
@@ -307,24 +310,8 @@ pub fn handle_add_landscape(
     landscapeComponentId: String,
     landscapeFilename: String,
     position: [f32; 3],
-    // callback: js_sys::Function,
 ) {
     pause_rendering();
-
-    // let state = get_renderer_state();
-
-    // spawn(async move {
-    // let params = to_value(&GetLandscapeParams {
-    //     projectId,
-    //     landscapeAssetId,
-    //     landscapeFilename,
-    // })
-    // .unwrap();
-
-    // let js_data = invoke("get_landscape_pixels", params).await;
-    // let data: LandscapeData = js_data
-    //     .into_serde()
-    //     .expect("Failed to transform byte string to value");
 
     let mut state_guard = state.lock().unwrap();
 
@@ -335,10 +322,33 @@ pub fn handle_add_landscape(
     drop(state_guard);
 
     resume_rendering();
+}
 
-    // let this = JsValue::null();
-    // let _ = callback.call0(&this);
-    // });
+pub fn handle_add_skeleton_part(
+    state: Arc<Mutex<RendererState>>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    partComponentId: String,
+    position: [f32; 3],
+    joints: Vec<Joint>,
+    joint_positions: &HashMap<String, Point3<f32>>,
+) {
+    pause_rendering();
+
+    let mut state_guard = state.lock().unwrap();
+
+    state_guard.add_skeleton_part(
+        device,
+        queue,
+        &partComponentId,
+        position,
+        joints,
+        joint_positions,
+    );
+
+    drop(state_guard);
+
+    resume_rendering();
 }
 
 pub fn handle_add_landscape_texture(
