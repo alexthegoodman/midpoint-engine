@@ -332,7 +332,7 @@ pub fn handle_add_skeleton_part(
     position: [f32; 3],
     joints: Vec<Joint>,
     joint_positions: &HashMap<String, Point3<f32>>,
-    joint_rotations: &HashMap<String, Vector3<f32>>,
+    // joint_rotations: &HashMap<String, Vector3<f32>>,
 ) {
     pause_rendering();
 
@@ -345,7 +345,7 @@ pub fn handle_add_skeleton_part(
         position,
         joints,
         joint_positions,
-        joint_rotations,
+        // joint_rotations,
     );
 
     drop(state_guard);

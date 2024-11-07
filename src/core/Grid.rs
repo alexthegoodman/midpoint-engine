@@ -191,6 +191,7 @@ impl Grid {
         let half_width = width / 2.0;
         let half_depth = depth / 2.0;
         let half_line_width = line_width / 2.0;
+        let color = [1.0, 1.0, 0.0];
 
         // Generate vertices and indices for vertical lines (along Z axis)
         for i in 0..=((width / spacing) as u16) {
@@ -203,28 +204,28 @@ impl Grid {
                     position: [x - half_line_width, 0.0, -half_depth],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [0.0, 0.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
                 // Bottom-right vertex
                 Vertex {
                     position: [x + half_line_width, 0.0, -half_depth],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [1.0, 0.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
                 // Top-left vertex
                 Vertex {
                     position: [x - half_line_width, 0.0, half_depth],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [0.0, 1.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
                 // Top-right vertex
                 Vertex {
                     position: [x + half_line_width, 0.0, half_depth],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [1.0, 1.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
             ]);
 
@@ -253,28 +254,28 @@ impl Grid {
                     position: [-half_width, 0.0, z - half_line_width],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [0.0, 0.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
                 // Right-bottom vertex
                 Vertex {
                     position: [half_width, 0.0, z - half_line_width],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [1.0, 0.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
                 // Left-top vertex
                 Vertex {
                     position: [-half_width, 0.0, z + half_line_width],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [0.0, 1.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
                 // Right-top vertex
                 Vertex {
                     position: [half_width, 0.0, z + half_line_width],
                     normal: [0.0, 1.0, 0.0],
                     tex_coords: [1.0, 1.0],
-                    color: [1.0, 1.0, 1.0],
+                    color,
                 },
             ]);
 

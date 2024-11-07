@@ -130,7 +130,7 @@ impl BoneSegment {
         end_joint_id: String,
         start_pos: Point3<f32>,
         end_pos: Point3<f32>,
-        parent_rotation: Option<Vector3<f32>>,
+        // parent_rotation: Option<Vector3<f32>>,
     ) -> Self {
         // Calculate bone properties from joint positions
         let bone_vector = end_pos - start_pos;
@@ -367,30 +367,42 @@ impl SkeletonRenderPart {
         bind_group_layout: &wgpu::BindGroupLayout,
         joints: Vec<Joint>,
         joint_positions: &HashMap<String, Point3<f32>>,
-        joint_rotations: &HashMap<String, Vector3<f32>>,
+        // joint_rotations: &HashMap<String, Vector3<f32>>,
+        position: [f32; 3],
     ) {
         let mut bones = Vec::new();
 
         for joint in joints {
-            let parent_rotation = joint
-                .parent_id
-                .as_ref()
-                .and_then(|id| joint_rotations.get(id))
-                .copied();
+            // let parent_rotation = joint
+            //     .parent_id
+            //     .as_ref()
+            //     .and_then(|id| joint_rotations.get(id))
+            //     .copied();
 
             if let Some(parent_id) = &joint.parent_id {
                 if let (Some(start_pos), Some(end_pos)) = (
                     joint_positions.get(parent_id),
                     joint_positions.get(&joint.id),
                 ) {
+                    let adjusted_start = Point3::new(
+                        position[0] + start_pos.x,
+                        position[1] + start_pos.y,
+                        position[2] + start_pos.z,
+                    );
+                    let adjusted_end = Point3::new(
+                        position[0] + end_pos.x,
+                        position[1] + end_pos.y,
+                        position[2] + end_pos.z,
+                    );
+
                     let bone = BoneSegment::new(
                         device,
                         bind_group_layout,
                         parent_id.clone(),
                         joint.id.clone(),
-                        *start_pos,
-                        *end_pos,
-                        parent_rotation,
+                        adjusted_start,
+                        adjusted_end,
+                        // parent_rotation,
                     );
                     bones.push(bone);
                 }

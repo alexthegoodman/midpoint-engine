@@ -146,8 +146,6 @@ pub struct SkeletonPart {
     pub ik_chains: Vec<IKChain>,
     /// Points where this part can be attached to others
     pub attach_points: Vec<AttachPoint>,
-    /// Points where other parts can be attached to this one
-    pub accept_points: Vec<AttachPoint>,
 }
 
 /// Configuration for assembling skeleton parts

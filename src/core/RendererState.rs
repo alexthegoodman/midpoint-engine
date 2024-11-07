@@ -906,7 +906,7 @@ impl RendererState {
         position: [f32; 3],
         joints: Vec<Joint>,
         joint_positions: &HashMap<String, Point3<f32>>,
-        joint_rotations: &HashMap<String, Vector3<f32>>,
+        // joint_rotations: &HashMap<String, Vector3<f32>>,
     ) {
         let mut skeleton_part = SkeletonRenderPart::new(partComponentId.to_string());
         skeleton_part.create_bone_segments(
@@ -914,7 +914,8 @@ impl RendererState {
             &self.model_bind_group_layout,
             joints,
             joint_positions,
-            joint_rotations,
+            // joint_rotations,
+            position,
         );
 
         self.skeleton_parts.push(skeleton_part);
