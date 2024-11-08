@@ -109,7 +109,7 @@
 //         let raw_matrix = matrix4_to_raw_array(&empty_buffer);
 
 //         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//             label: Some("SimpleGizmo Uniform Buffer"),
+//             label: Some("TranslationGizmo Uniform Buffer"),
 //             contents: bytemuck::cast_slice(&raw_matrix),
 //             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 //         });
@@ -190,14 +190,14 @@
 //         // println!("vertices post: {:?}", vertices);
 
 //         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//             label: Some("SimpleGizmo Vertex Buffer"),
+//             label: Some("TranslationGizmo Vertex Buffer"),
 //             contents: bytemuck::cast_slice(&vertices),
 //             usage: wgpu::BufferUsages::VERTEX,
 //         });
 
 //         let index_buffer: wgpu::Buffer =
 //             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//                 label: Some("SimpleGizmo Index Buffer"),
+//                 label: Some("TranslationGizmo Index Buffer"),
 //                 contents: bytemuck::cast_slice(&draw_data.indices),
 //                 usage: wgpu::BufferUsages::INDEX,
 //             });

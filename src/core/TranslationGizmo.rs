@@ -15,14 +15,14 @@ use super::{
     Transform::{matrix4_to_raw_array, Transform},
 };
 
-pub struct SimpleGizmo {
+pub struct TranslationGizmo {
     pub arrows: [AxisArrow; 3],
     pub bind_group: wgpu::BindGroup,
     pub texture_bind_group: wgpu::BindGroup,
     pub transform: Transform,
 }
 
-impl SimpleGizmo {
+impl TranslationGizmo {
     pub fn new(
         device: &wgpu::Device,
         camera: &SimpleCamera,
@@ -198,22 +198,6 @@ impl AxisArrow {
                 (i + segments) as u32,
             ]);
         }
-
-        // TODO: Create capsule colliders instead of convex hull
-        // let collider = match axis {
-        //     0 => ColliderBuilder::capsule_x(length / 2.0, radius)
-        //         .user_data(id.as_u128())
-        //         .sensor(true)
-        //         .build(),
-        //     1 => ColliderBuilder::capsule_y(length / 2.0, radius)
-        //         .user_data(id.as_u128())
-        //         .sensor(true)
-        //         .build(),
-        //     _ => ColliderBuilder::capsule_z(length / 2.0, radius)
-        //         .user_data(id.as_u128())
-        //         .sensor(true)
-        //         .build(),
-        // };
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Gizmo Arrow Vertex Buffer"),

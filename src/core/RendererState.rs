@@ -29,12 +29,14 @@ use crate::{
 
 use super::Grid::GridConfig;
 use super::PlayerCharacter::{PlayerCharacter, NPC};
-use super::SimpleGizmo::AxisArrow;
+use super::RotationGizmo::RotationGizmo;
+use super::ScaleGizmo::ScaleGizmo;
+use super::TranslationGizmo::AxisArrow;
 use super::{
     Grid::Grid,
     Rays::{cast_ray_at_components, create_ray_from_mouse},
     SimpleCamera::SimpleCamera,
-    SimpleGizmo::SimpleGizmo,
+    TranslationGizmo::TranslationGizmo,
     Viewport::Viewport,
 };
 
@@ -107,7 +109,10 @@ pub struct RendererState {
     pub object_selected_kind: Option<ComponentKind>,
     pub object_selected_data: Option<ComponentData>,
 
-    pub gizmo: SimpleGizmo,
+    pub translation_gizmo: TranslationGizmo,
+    pub rotation_gizmo: RotationGizmo,
+    pub scale_gizmo: ScaleGizmo,
+    pub active_gizmo: String,
 
     // physics
     pub gravity: Vector<f32>,
@@ -133,7 +138,7 @@ pub struct RendererState {
     pub ray_intersecting: bool,
     pub ray_intersection: Option<RapierPoint<f32>>,
     pub ray_component_id: Option<Uuid>,
-    pub dragging_gizmo: bool,
+    pub dragging_translation_gizmo: bool,
     pub gizmo_drag_axis: Option<u8>,
 
     pub last_movement_time: Option<Instant>,
@@ -211,7 +216,31 @@ impl RendererState {
         //     texture_bind_group_layout.clone(),
         // );
 
-        let gizmo = SimpleGizmo::new(
+        let translation_gizmo = TranslationGizmo::new(
+            &device,
+            camera,
+            WindowSize {
+                width: window_width,
+                height: window_height,
+            },
+            camera_bind_group_layout.clone(), // TODO: check if right layout
+            color_render_mode_buffer.clone(),
+            texture_bind_group_layout.clone(),
+        );
+
+        let rotation_gizmo = RotationGizmo::new(
+            &device,
+            camera,
+            WindowSize {
+                width: window_width,
+                height: window_height,
+            },
+            camera_bind_group_layout.clone(), // TODO: check if right layout
+            color_render_mode_buffer.clone(),
+            texture_bind_group_layout.clone(),
+        );
+
+        let scale_gizmo = ScaleGizmo::new(
             &device,
             camera,
             WindowSize {
@@ -272,7 +301,11 @@ impl RendererState {
             object_selected_kind: None,
             object_selected_data: None,
 
-            gizmo,
+            translation_gizmo,
+            rotation_gizmo,
+            scale_gizmo,
+            active_gizmo: "translation".to_string(),
+
             gravity: vector![0.0, -9.81, 0.0],
             integration_parameters,
             physics_pipeline,
@@ -300,7 +333,7 @@ impl RendererState {
             ray_intersecting: false,
             ray_component_id: None,
             ray_intersection: None,
-            dragging_gizmo: false,
+            dragging_translation_gizmo: false,
             last_movement_time: None,
             last_frame_time: None,
             npcs: Vec::new(),
@@ -470,7 +503,7 @@ impl RendererState {
     }
 
     pub fn add_arrow_colliders(&mut self) {
-        self.gizmo.arrows.iter_mut().for_each(|arrow| {
+        self.translation_gizmo.arrows.iter_mut().for_each(|arrow| {
             println!("adding arrow collider");
             let collider_handle = self.collider_set.insert(arrow.rapier_collider.clone());
             arrow.collider_handle = Some(collider_handle);
@@ -482,7 +515,7 @@ impl RendererState {
         //arrows: &[AxisArrow; 3],
         position: [f32; 3],
     ) {
-        self.gizmo.arrows.iter().for_each(|arrow| {
+        self.translation_gizmo.arrows.iter().for_each(|arrow| {
             // Create translation vector based on the arrow's axis
             let translation = match arrow.axis {
                 0 => vector![position[0], position[1], position[2]], // X axis
