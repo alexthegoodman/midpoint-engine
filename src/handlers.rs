@@ -122,7 +122,8 @@ pub fn get_camera() -> &'static mut SimpleCamera {
 
 pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
     let camera = get_camera();
-    // let mut state_guard = state.lock().unwrap();
+    let mut state_guard = state.lock().unwrap();
+    let speed_multiplier = state_guard.navigation_speed;
 
     let mut diff = Vector3::identity();
 
@@ -130,12 +131,14 @@ pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pre
         "w" => {
             if is_pressed {
                 diff = camera.direction * 0.1;
+                diff = diff * speed_multiplier;
                 camera.position += diff;
             }
         }
         "s" => {
             if is_pressed {
                 diff = camera.direction * 0.1;
+                diff = diff * speed_multiplier;
                 camera.position -= diff;
             }
         }
@@ -143,6 +146,7 @@ pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pre
             if is_pressed {
                 let right = camera.direction.cross(&camera.up).normalize();
                 diff = right * 0.1;
+                diff = diff * speed_multiplier;
                 camera.position -= diff;
             }
         }
@@ -150,6 +154,7 @@ pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pre
             if is_pressed {
                 let right = camera.direction.cross(&camera.up).normalize();
                 diff = right * 0.1;
+                diff = diff * speed_multiplier;
                 camera.position += diff;
             }
         }
@@ -174,6 +179,8 @@ pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pre
     //     camera.position.z,
     // ]);
     // state_guard.update_player_character_position(diff, 0.1);
+
+    drop(state_guard);
 
     camera.update();
 }

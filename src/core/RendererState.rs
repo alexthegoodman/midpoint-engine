@@ -143,6 +143,8 @@ pub struct RendererState {
 
     pub last_movement_time: Option<Instant>,
     pub last_frame_time: Option<Instant>,
+
+    pub navigation_speed: f32,
 }
 
 // impl<'a> RendererState<'a> {
@@ -338,6 +340,7 @@ impl RendererState {
             last_frame_time: None,
             npcs: Vec::new(),
             gizmo_drag_axis: None,
+            navigation_speed: 5.0,
         }
     }
 
