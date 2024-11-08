@@ -202,29 +202,35 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
                         }
                     }
 
-                    for landscape in &engine.landscapes {
-                        if (landscape.texture_bind_group.is_some()) {
-                            landscape
-                                .transform
-                                .update_uniform_buffer(&gpu_resources.queue);
-                            render_pass.set_bind_group(0, &engine.camera_bind_group, &[]);
-                            render_pass.set_bind_group(1, &landscape.bind_group, &[]);
-                            render_pass.set_bind_group(
-                                2,
-                                &landscape
-                                    .texture_bind_group
-                                    .as_ref()
-                                    .expect("No landscape texture bind group"),
-                                &[],
-                            );
+                    for manager in &engine.landscape_managers {
+                        for tile in &manager.tiles {
+                            let is_loaded = tile.1.is_loaded;
 
-                            render_pass.set_vertex_buffer(0, landscape.vertex_buffer.slice(..));
-                            render_pass.set_index_buffer(
-                                landscape.index_buffer.slice(..),
-                                wgpu::IndexFormat::Uint32,
-                            );
+                            if (is_loaded) {
+                                let landscape = &tile.1.landscape;
 
-                            render_pass.draw_indexed(0..landscape.index_count as u32, 0, 0..1);
+                                manager
+                                    .transform
+                                    .update_uniform_buffer(&gpu_resources.queue);
+                                render_pass.set_bind_group(0, &engine.camera_bind_group, &[]);
+                                render_pass.set_bind_group(1, &manager.bind_group, &[]);
+                                render_pass.set_bind_group(
+                                    2,
+                                    &landscape
+                                        .texture_bind_group
+                                        .as_ref()
+                                        .expect("No landscape texture bind group"),
+                                    &[],
+                                );
+
+                                render_pass.set_vertex_buffer(0, landscape.vertex_buffer.slice(..));
+                                render_pass.set_index_buffer(
+                                    landscape.index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint32,
+                                );
+
+                                render_pass.draw_indexed(0..landscape.index_count as u32, 0, 0..1);
+                            }
                         }
                     }
                 }
@@ -1011,24 +1017,25 @@ pub fn restore_renderer_from_saved(
             println!("onward...");
 
             // restore generic properties like position
-            let mut renderer_state_guard = renderer_state.lock().unwrap();
+            // let mut renderer_state_guard = renderer_state.lock().unwrap();
 
-            let mut renderer_landscape = renderer_state_guard
-                .landscapes
-                .iter_mut()
-                .find(|l| l.id == component.id.clone())
-                .expect("Couldn't get Renderer Landscape");
+            // done via initial_position in handle_add_landscape
+            // let mut renderer_landscape = renderer_state_guard
+            //     .landscapes
+            //     .iter_mut()
+            //     .find(|l| l.id == component.id.clone())
+            //     .expect("Couldn't get Renderer Landscape");
 
-            renderer_landscape.transform.update_position(position);
+            // renderer_landscape.transform.update_position(position);
             // including rapier!
             // Convert euler angles (Vector3) to Quaternion/Isometry
-            let isometry = nalgebra::Isometry3::new(
-                vector![position[0], position[1], position[2]],
-                // vector![-50.0, -50.0, -50.0],
-                vector![rotation[0], rotation[1], rotation[2]],
-            );
+            // let isometry = nalgebra::Isometry3::new(
+            //     vector![position[0], position[1], position[2]],
+            //     // vector![-50.0, -50.0, -50.0],
+            //     vector![rotation[0], rotation[1], rotation[2]],
+            // );
 
-            drop(renderer_state_guard);
+            // drop(renderer_state_guard);
 
             let mut renderer_state_guard = renderer_state.lock().unwrap();
 

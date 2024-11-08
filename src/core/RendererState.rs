@@ -9,6 +9,7 @@ use wgpu::BindGroupLayout;
 use crate::animations::render_skeleton::SkeletonRenderPart;
 use crate::animations::skeleton::Joint;
 use crate::handlers::get_camera;
+use crate::landscapes::LandscapeManager::LandscapeManager;
 use crate::{
     core::Texture::Texture,
     helpers::saved_data::{ComponentData, ComponentKind},
@@ -91,7 +92,8 @@ pub struct RendererState {
     pub pyramids: Vec<Pyramid>,
     pub grids: Vec<Grid>,
     pub models: Vec<Model>,
-    pub landscapes: Vec<Landscape>,
+    // pub landscapes: Vec<Landscape>,
+    pub landscape_managers: Vec<LandscapeManager>,
     pub skeleton_parts: Vec<SkeletonRenderPart>, // will contain buffers and the like
 
     // wgpu
@@ -202,21 +204,10 @@ impl RendererState {
 
         let mut models = Vec::new();
 
-        let mut landscapes = Vec::new();
+        // let mut landscapes = Vec::new();
+        let mut landscape_managers = Vec::new();
 
         let mut skeleton_parts = Vec::new();
-
-        // let gizmo = TestTransformGizmo::new(
-        //     &device,
-        //     camera,
-        //     WindowSize {
-        //         width: window_width,
-        //         height: window_height,
-        //     },
-        //     camera_bind_group_layout.clone(), // TODO: check if right layout
-        //     color_render_mode_buffer.clone(),
-        //     texture_bind_group_layout.clone(),
-        // );
 
         let translation_gizmo = TranslationGizmo::new(
             &device,
@@ -284,7 +275,8 @@ impl RendererState {
             pyramids,
             grids,
             models,
-            landscapes,
+            // landscapes,
+            landscape_managers,
             skeleton_parts,
 
             // device,
@@ -439,15 +431,15 @@ impl RendererState {
             }
 
             // Update landscapes
-            if let Some(instance_landscape_data) = self
-                .landscapes
+            if let Some(landscape_manager) = self
+                .landscape_managers
                 .iter_mut()
                 .find(|m| m.id == component_id.to_string())
             {
-                instance_landscape_data
+                landscape_manager
                     .transform
                     .update_position([position.x, position.y, position.z]);
-                instance_landscape_data
+                landscape_manager
                     .transform
                     .update_rotation([euler.0, euler.1, euler.2]);
             }
@@ -677,49 +669,66 @@ impl RendererState {
         //arrows: &[AxisArrow; 3],
         position: [f32; 3],
     ) {
-        self.landscapes.iter().for_each(|landscape| {
-            // Create translation vector based on the arrow's axis
-            let translation = vector![position[0], position[1], position[2]];
+        self.landscape_managers
+            .iter()
+            .for_each(|landscape_manager| {
+                // Create translation vector based on the arrow's axis
+                let translation = vector![position[0], position[1], position[2]];
 
-            let isometry =
-                nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
+                let tiles = &landscape_manager.tiles;
 
-            if let Some(collider) = self.collider_set.get_mut(
-                landscape
-                    .collider_handle
-                    .expect("Couldn't get landscape collider handle"),
-            ) {
-                collider.set_position(isometry);
-            }
-        });
+                for tile_info in tiles {
+                    let landscape = &tile_info.1.landscape;
+                    let grid_x = tile_info.0 .0;
+                    let grid_z = tile_info.0 .1;
+
+                    let x_diff = grid_x * 1024;
+                    let z_diff = grid_z * 1024;
+
+                    if let Some(collider) = self.collider_set.get_mut(
+                        landscape
+                            .collider_handle
+                            .expect("Couldn't get landscape collider handle"),
+                    ) {
+                        let isometry = nalgebra::Isometry3::translation(
+                            translation.x + x_diff as f32,
+                            translation.y,
+                            translation.z + z_diff as f32,
+                        );
+
+                        collider.set_position(isometry);
+                    }
+                }
+            });
     }
 
     pub fn add_collider(&mut self, component_id: String, component_kind: ComponentKind) {
         match component_kind {
             ComponentKind::Landscape => {
-                let renderer_landscape = self
-                    .landscapes
+                let landscape_manager = self
+                    .landscape_managers
                     .iter_mut()
                     .find(|l| l.id == component_id.clone())
                     .expect("Couldn't get Renderer Landscape");
 
-                // let collider_handle = self
-                //     .collider_set
-                //     .insert(renderer_landscape.rapier_heightfield.clone());
-                // renderer_landscape.collider_handle = Some(collider_handle);
+                let tiles = &mut landscape_manager.tiles;
 
-                let rigid_body_handle = self
-                    .rigid_body_set
-                    .insert(renderer_landscape.rapier_rigidbody.clone());
-                renderer_landscape.rigid_body_handle = Some(rigid_body_handle);
+                for tile_info in tiles {
+                    let renderer_landscape = &mut tile_info.1.landscape;
 
-                // now associate rigidbody with collider
-                let collider_handle = self.collider_set.insert_with_parent(
-                    renderer_landscape.rapier_heightfield.clone(),
-                    rigid_body_handle,
-                    &mut self.rigid_body_set,
-                );
-                renderer_landscape.collider_handle = Some(collider_handle);
+                    let rigid_body_handle = self
+                        .rigid_body_set
+                        .insert(renderer_landscape.rapier_rigidbody.clone());
+                    renderer_landscape.rigid_body_handle = Some(rigid_body_handle);
+
+                    // now associate rigidbody with collider
+                    let collider_handle = self.collider_set.insert_with_parent(
+                        renderer_landscape.rapier_heightfield.clone(),
+                        rigid_body_handle,
+                        &mut self.rigid_body_set,
+                    );
+                    renderer_landscape.collider_handle = Some(collider_handle);
+                }
             }
             ComponentKind::Model => {
                 let renderer_model = self
@@ -774,27 +783,51 @@ impl RendererState {
         self.models.push(model);
     }
 
-    pub fn add_landscape(
+    // pub fn add_landscape(
+    //     &mut self,
+    //     device: &wgpu::Device,
+    //     queue: &wgpu::Queue,
+    //     landscapeComponentId: &String,
+    //     data: &LandscapePixelData,
+    //     position: [f32; 3],
+    // ) {
+    //     let landscape = Landscape::new(
+    //         landscapeComponentId,
+    //         data,
+    //         device,
+    //         queue,
+    //         &self.model_bind_group_layout,
+    //         &self.texture_bind_group_layout,
+    //         // &self.texture_render_mode_buffer,
+    //         &self.color_render_mode_buffer,
+    //         position,
+    //     );
+
+    //     self.landscapes.push(landscape);
+    // }
+
+    pub fn add_landscape_manager(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        landscapeComponentId: &String,
-        data: &LandscapePixelData,
+        landscape_component_id: &String,
+        asset_id: String,
+        upscaled_count: &usize,
         position: [f32; 3],
     ) {
-        let landscape = Landscape::new(
-            landscapeComponentId,
-            data,
+        let landscape_manager = LandscapeManager::new(
             device,
-            queue,
-            &self.model_bind_group_layout,
-            &self.texture_bind_group_layout,
-            // &self.texture_render_mode_buffer,
-            &self.color_render_mode_buffer,
+            self.model_bind_group_layout.clone(),
+            self.project_selected
+                .expect("Couldn't get current project id")
+                .to_string(),
+            asset_id,
+            landscape_component_id,
             position,
+            upscaled_count,
         );
 
-        self.landscapes.push(landscape);
+        self.landscape_managers.push(landscape_manager);
     }
 
     pub fn update_landscape_texture(
@@ -807,25 +840,33 @@ impl RendererState {
         maskKind: LandscapeTextureKinds,
         mask: Texture,
     ) {
-        if let Some(landscape) = self.landscapes.iter_mut().find(|l| l.id == landscape_id) {
-            landscape.update_texture(
-                device,
-                queue,
-                &self.texture_bind_group_layout,
-                &self.texture_render_mode_buffer,
-                &self.color_render_mode_buffer,
-                kind,
-                &texture,
-            );
-            landscape.update_texture(
-                device,
-                queue,
-                &self.texture_bind_group_layout,
-                &self.texture_render_mode_buffer,
-                &self.color_render_mode_buffer,
-                maskKind,
-                &mask,
-            );
+        if let Some(landscape_manager) = self
+            .landscape_managers
+            .iter_mut()
+            .find(|l| l.id == landscape_id)
+        {
+            for tile_info in &mut landscape_manager.tiles {
+                let landscape = &mut tile_info.1.landscape;
+
+                landscape.update_texture(
+                    device,
+                    queue,
+                    &self.texture_bind_group_layout,
+                    &self.texture_render_mode_buffer,
+                    &self.color_render_mode_buffer,
+                    kind.clone(),
+                    &texture,
+                );
+                landscape.update_texture(
+                    device,
+                    queue,
+                    &self.texture_bind_group_layout,
+                    &self.texture_render_mode_buffer,
+                    &self.color_render_mode_buffer,
+                    maskKind.clone(),
+                    &mask,
+                );
+            }
         }
     }
 
@@ -850,6 +891,30 @@ impl RendererState {
         );
 
         self.skeleton_parts.push(skeleton_part);
+    }
+
+    pub fn update_landscape_stream(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        unscaled_filename: Option<String>,
+    ) {
+        let camera = get_camera();
+        let landscape_manager = self
+            .landscape_managers
+            .get_mut(0)
+            .expect("Couldn't get first landscape (manager)");
+
+        landscape_manager.update(
+            &self.model_bind_group_layout,
+            &self.texture_bind_group_layout,
+            &self.color_render_mode_buffer,
+            device,
+            queue,
+            self.project_selected.expect("Couldn't get id").to_string(),
+            [camera.position.x, camera.position.y, camera.position.z],
+            unscaled_filename,
+        );
     }
 }
 

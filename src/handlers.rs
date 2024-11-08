@@ -18,8 +18,12 @@ use std::{cell::RefCell, collections::HashMap};
 
 use super::shapes::Cube::Cube;
 use crate::{
-    animations::skeleton::Joint, core::SimpleCamera::SimpleCamera,
-    helpers::landscapes::read_landscape_texture,
+    animations::skeleton::Joint,
+    core::SimpleCamera::SimpleCamera,
+    helpers::{
+        landscapes::read_landscape_texture,
+        utilities::{count_files_in_directory, get_common_os_dir},
+    },
 };
 use crate::{
     core::{Grid::Grid, RendererState::RendererState},
@@ -120,7 +124,14 @@ pub fn get_camera() -> &'static mut SimpleCamera {
     unsafe { CAMERA.as_mut().unwrap() }
 }
 
-pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pressed: bool) {
+pub fn handle_key_press(
+    state: Arc<Mutex<RendererState>>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    unscaled_filename: Option<String>,
+    key_code: &str,
+    is_pressed: bool,
+) {
     let camera = get_camera();
     let mut state_guard = state.lock().unwrap();
     let speed_multiplier = state_guard.navigation_speed;
@@ -163,22 +174,8 @@ pub fn handle_key_press(state: Arc<Mutex<RendererState>>, key_code: &str, is_pre
         }
     }
 
-    // // Calculate delta time
-    // let now = std::time::Instant::now();
-    // let dt = (now - state_guard.last_movement_time).as_secs_f32();
-    // state_guard.last_movement_time = now;
-
-    // // // Use dt to scale movement
-    // let base_speed = 5.0; // units per second
-    // let movement_delta = base_speed * dt; // This gives frame-rate independent movement
-    // let desired_movement = camera.direction * movement_delta; // or use diff? I don't think this accounts for which key is pressed
-
-    // state_guard.update_player_collider_position([
-    //     camera.position.x,
-    //     camera.position.y,
-    //     camera.position.z,
-    // ]);
-    // state_guard.update_player_character_position(diff, 0.1);
+    // fot now, just one landscape
+    state_guard.update_landscape_stream(device, queue, unscaled_filename);
 
     drop(state_guard);
 
@@ -322,9 +319,28 @@ pub fn handle_add_landscape(
 
     let mut state_guard = state.lock().unwrap();
 
-    let data = get_landscape_pixels(projectId, landscapeAssetId, landscapeFilename);
+    // let data = get_landscape_pixels(projectId, landscapeAssetId, landscapeFilename);
+    // state_guard.add_landscape(device, queue, &landscapeComponentId, &data, position);
 
-    state_guard.add_landscape(device, queue, &landscapeComponentId, &data, position);
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
+    let landscapes_dir = sync_dir.join(format!(
+        "midpoint/projects/{}/landscapes/{}/heightmaps/upscaled",
+        projectId, landscapeAssetId
+    ));
+    // let landscape_path = landscapes_dir.join(landscapeFilename);
+
+    let upscaled_count =
+        count_files_in_directory(landscapes_dir.to_str().expect("Couldn't create str"))
+            .expect("Couldn't count directory files");
+
+    state_guard.add_landscape_manager(
+        device,
+        queue,
+        &landscapeComponentId,
+        landscapeAssetId,
+        &upscaled_count,
+        position,
+    );
 
     drop(state_guard);
 

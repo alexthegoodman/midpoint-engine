@@ -51,3 +51,10 @@ pub fn load_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::e
 
 //     RowMatrix4::from(result)
 // }
+
+pub fn count_files_in_directory(path: &str) -> Result<usize, std::io::Error> {
+    Ok(fs::read_dir(path)?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().map_or(false, |ft| ft.is_file()))
+        .count())
+}

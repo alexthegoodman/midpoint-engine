@@ -18,11 +18,11 @@ use crate::helpers::saved_data::LandscapeTextureKinds;
 
 pub struct Landscape {
     pub id: String,
-    pub transform: Transform,
+    // pub transform: Transform,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub index_count: u32,
-    pub bind_group: wgpu::BindGroup,
+    // pub bind_group: wgpu::BindGroup,
     // pub texture_bind_group: wgpu::BindGroup,
     pub texture_array: Option<wgpu::Texture>,
     pub texture_array_view: Option<wgpu::TextureView>,
@@ -88,7 +88,7 @@ impl Landscape {
                 .fold(f32::NEG_INFINITY, |a, &b| a.max(b))
         );
 
-        let square_size = 1024.0 * 100.0;
+        let square_size = 1024.0;
         // let square_height = 1858.0;
 
         // Create terrain size that matches your actual terrain dimensions
@@ -149,23 +149,23 @@ impl Landscape {
             });
 
         // set uniform buffer for transforms
-        let empty_buffer = Matrix4::<f32>::identity();
-        let raw_matrix = matrix4_to_raw_array(&empty_buffer);
+        // let empty_buffer = Matrix4::<f32>::identity();
+        // let raw_matrix = matrix4_to_raw_array(&empty_buffer);
 
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model GLB Uniform Buffer"),
-            contents: bytemuck::cast_slice(&raw_matrix),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        // let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Model GLB Uniform Buffer"),
+        //     contents: bytemuck::cast_slice(&raw_matrix),
+        //     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        // });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
+        // let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        //     layout: &bind_group_layout,
+        //     entries: &[wgpu::BindGroupEntry {
+        //         binding: 0,
+        //         resource: uniform_buffer.as_entire_binding(),
+        //     }],
+        //     label: None,
+        // });
 
         // creating default texture view and sampler just like in Model, for use when model has no textures, but uses same shader
         // Create a default empty texture and sampler
@@ -226,14 +226,14 @@ impl Landscape {
             index_count: indices.len() as u32,
             vertex_buffer,
             index_buffer,
-            bind_group,
+            // bind_group,
             // texture_bind_group,
-            transform: Transform::new(
-                Vector3::new(0.0, -100.0, 0.0),
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                uniform_buffer,
-            ),
+            // transform: Transform::new(
+            //     Vector3::new(0.0, -100.0, 0.0),
+            //     Vector3::new(0.0, 0.0, 0.0),
+            //     Vector3::new(1.0, 1.0, 1.0),
+            //     uniform_buffer,
+            // ),
             texture_array: None,
             texture_array_view: None,
             texture_bind_group: None,

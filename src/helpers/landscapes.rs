@@ -151,6 +151,39 @@ pub fn get_landscape_pixels(
     }
 }
 
+pub fn get_upscaled_landscape_pixels(
+    projectId: String,
+    landscapeAssetId: String,
+    upscaledFilename: String,
+) -> LandscapePixelData {
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
+    let landscapes_dir = sync_dir.join(format!(
+        "midpoint/projects/{}/landscapes/{}/heightmaps/upscaled",
+        projectId, landscapeAssetId
+    ));
+    let landscape_path = landscapes_dir.join(upscaledFilename);
+
+    println!("get_upscaled_landscape_pixels {:?}", landscape_path);
+
+    let square_size = 1024.0;
+    let square_height = 250.0;
+    let (width, height, pixel_data, rapier_heights) = read_tiff_heightmap(
+        landscape_path
+            .to_str()
+            .expect("Couldn't form landscape string"),
+        square_size,
+        square_size,
+        square_height,
+    );
+
+    LandscapePixelData {
+        width,
+        height,
+        pixel_data,
+        rapier_heights,
+    }
+}
+
 pub fn read_landscape_texture(
     // state: tauri::State<'_, AppState>,
     projectId: String,
