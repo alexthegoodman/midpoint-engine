@@ -447,6 +447,7 @@ impl RendererState {
             }
 
             // Update landscapes
+            // just helps knowing terrain is where the physics are
             if let Some(terrain_manager) = self
                 .terrain_managers
                 .iter_mut()

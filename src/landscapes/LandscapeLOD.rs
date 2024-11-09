@@ -121,20 +121,17 @@ impl QuadNode {
         collider_set: &mut ColliderSet,
     ) {
         if let Some(ref mesh) = self.mesh {
-            // Create rigid body
-            // let rigid_body = RigidBodyBuilder::fixed().build();
+            // Get rigid body
             let rigid_body_handle = rigid_body_set.insert(mesh.rigid_body.clone()); // TODO: bad clone?
             self.rigid_body_handle = Some(rigid_body_handle);
 
             // Create and attach collider if we have one
-            // if let Some(ref collider) = mesh.collider {
             let collider_handle = collider_set.insert_with_parent(
                 mesh.collider.clone(), // bad clone?
                 rigid_body_handle,
                 rigid_body_set,
             );
             self.collider_handle = Some(collider_handle);
-            // }
         }
 
         // Recursively add physics components to children
@@ -515,10 +512,15 @@ impl QuadNode {
 
         // Create Rapier heightfield
         let heights = height_matrix;
+        // let scaling = vector![
+        //     bounds.width / (resolution - 1) as f32,
+        //     1.0, // Height scale
+        //     bounds.height / (resolution - 1) as f32
+        // ];
         let scaling = vector![
-            bounds.width / (resolution - 1) as f32,
+            bounds.width as f32,
             1.0, // Height scale
-            bounds.height / (resolution - 1) as f32
+            bounds.height as f32
         ];
         let translation = vector![bounds.x, 0.0, bounds.z];
 
