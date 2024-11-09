@@ -143,6 +143,7 @@ pub struct RendererState {
 
     pub last_movement_time: Option<Instant>,
     pub last_frame_time: Option<Instant>,
+    pub last_lod_time: Option<Instant>,
 
     pub navigation_speed: f32,
 }
@@ -341,6 +342,7 @@ impl RendererState {
             npcs: Vec::new(),
             gizmo_drag_axis: None,
             navigation_speed: 5.0,
+            last_lod_time: None,
         }
     }
 
@@ -500,6 +502,29 @@ impl RendererState {
     //     self.dragging_gizmo = true;
     //     self.gizmo_drag_axis = Some(axis);
     // }
+
+    pub fn update_landscape_lods(&mut self, queue: &wgpu::Queue) {
+        let now = std::time::Instant::now();
+
+        if let Some(last_time) = self.last_lod_time {
+            // Create a duration of 10 seconds
+            let ten_seconds = std::time::Duration::from_secs(10);
+
+            if now > last_time + ten_seconds {
+                println!("update_landscape_lods");
+                // 10 seconds has passed
+                self.landscapes
+                    .get_mut(0)
+                    .expect("Couldn't get first landscape")
+                    .update_buffers(queue);
+
+                self.last_lod_time = Some(now);
+            }
+        } else {
+            // First time running
+            self.last_lod_time = Some(now);
+        }
+    }
 
     pub fn update_rapier(&mut self) {
         self.query_pipeline.update(&self.collider_set);
@@ -781,6 +806,8 @@ impl RendererState {
         landscapeComponentId: &String,
         data: &LandscapePixelData,
         position: [f32; 3],
+        project_id: String,
+        asset_id: String,
     ) {
         let landscape = Landscape::new(
             landscapeComponentId,
@@ -792,6 +819,8 @@ impl RendererState {
             // &self.texture_render_mode_buffer,
             &self.color_render_mode_buffer,
             position,
+            project_id,
+            asset_id,
         );
 
         self.landscapes.push(landscape);

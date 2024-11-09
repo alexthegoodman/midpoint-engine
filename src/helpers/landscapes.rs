@@ -4,6 +4,8 @@ use image::GenericImageView;
 use serde::Serialize;
 use tiff::decoder::{Decoder, DecodingResult};
 
+use crate::landscapes::ChunkedTerrainGenerator::ChunkedTerrainGenerator;
+
 use super::utilities::get_common_os_dir;
 
 pub struct LandscapePixelData {
@@ -111,6 +113,7 @@ pub fn get_landscape_pixels(
     projectId: String,
     landscapeAssetId: String,
     landscapeFilename: String,
+    upscaled: bool,
 ) -> LandscapePixelData {
     // let handle = &state.handle;
     // let config = handle.config();
@@ -122,7 +125,14 @@ pub fn get_landscape_pixels(
         "midpoint/projects/{}/landscapes/{}/heightmaps",
         projectId, landscapeAssetId
     ));
-    let landscape_path = landscapes_dir.join(landscapeFilename);
+    // let landscape_path = landscapes_dir.join(landscapeFilename);
+    let landscape_path = if upscaled {
+        landscapes_dir
+            .join("upscaled")
+            .join("upscaled_heightmap.tiff")
+    } else {
+        landscapes_dir.join(landscapeFilename)
+    };
 
     println!("landscape_path {:?}", landscape_path);
 
@@ -250,6 +260,8 @@ use rayon::prelude::*;
 use tiff::encoder::*;
 
 pub fn upscale_tiff_heightmap(
+    project_id: String,
+    asset_id: String,
     input_path: &Path,
     output_dir: &Path,
     multiplier: u32,
@@ -308,17 +320,6 @@ pub fn upscale_tiff_heightmap(
             let nearest_value = image_data[(nearest_y * width + nearest_x) as usize];
             upscaled_nearest[(y * upscaled_width + x) as usize] = nearest_value;
 
-            // // Log when value changes significantly (using a small epsilon to avoid float comparison issues)
-            // const EPSILON: f32 = 0.0001;
-            // if (nearest_value - last_value).abs() > EPSILON {
-            //     println!(
-            //         "Value changed at ({}, {}): {} -> {} (src: {}, {})",
-            //         x, y, last_value, nearest_value, src_x, src_y
-            //     );
-            //     last_value = nearest_value;
-            //     value_changes += 1;
-            // }
-
             // Bilinear (modified to print debug info for first few pixels)
             let x_fract = (x as f32 / multiplier as f32) - src_x;
             let y_fract = (y as f32 / multiplier as f32) - src_y;
@@ -332,17 +333,6 @@ pub fn upscale_tiff_heightmap(
             let p12 = image_data[(y2 * width + x1) as usize];
             let p21 = image_data[(y1 * width + x2) as usize];
             let p22 = image_data[(y2 * width + x2) as usize];
-
-            // // Debug print for first few pixels to compare methods
-            // if x < 5 && y < 5 {
-            //     println!("Pixel ({}, {})", x, y);
-            //     println!("  Nearest: {}", nearest_value);
-            //     println!(
-            //         "  Bilinear inputs: p11={}, p12={}, p21={}, p22={}",
-            //         p11, p12, p21, p22
-            //     );
-            //     println!("  Fractions: x={}, y={}", x_fract, y_fract);
-            // }
 
             let bilinear_value = bilinear_interpolate(p11, p12, p21, p22, x_fract, y_fract);
             upscaled_bilinear[(y * upscaled_width + x) as usize] = bilinear_value;
@@ -386,58 +376,124 @@ pub fn upscale_tiff_heightmap(
     println!("smoothed...");
 
     // DEBUG verify upscale
-    // let tile_path = output_dir.join("test_tile.tiff");
-    // let mut file = File::create(&tile_path).expect("Failed to create test tile file");
+    let tile_path = output_dir.join("upscaled_heightmap.tiff");
+    let mut file = File::create(&tile_path).expect("Failed to create test tile file");
 
-    // let mut tiff = TiffEncoder::new(&mut file).unwrap();
-    // tiff.write_image::<colortype::Gray32Float>(upscaled_width, upscaled_height, &upscaled_nearest)
-    //     .unwrap_or_else(|e| {
-    //         panic!(
-    //             "Failed to write test tile {}_{}: {}",
-    //             upscaled_width, upscaled_height, e
-    //         )
-    //     });
+    let mut tiff = TiffEncoder::new(&mut file).unwrap();
+    tiff.write_image::<colortype::Gray32Float>(upscaled_width, upscaled_height, &upscaled_nearest)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to write test tile {}_{}: {}",
+                upscaled_width, upscaled_height, e
+            )
+        });
 
-    // Subdivide and save tiles
-    let tiles: Vec<(usize, usize)> = (0..tiles_per_side as usize)
-        .flat_map(|y| (0..tiles_per_side as usize).map(move |x| (x, y)))
-        .collect();
+    // // Subdivide and save tiles
+    // let tiles: Vec<(usize, usize)> = (0..tiles_per_side as usize)
+    //     .flat_map(|y| (0..tiles_per_side as usize).map(move |x| (x, y)))
+    //     .collect();
 
-    tiles.par_iter().for_each(|&(tile_x, tile_y)| {
-        // Create buffer of correct size: 4096x4096
-        let mut tile_data = vec![0.0f32; (tile_width * tile_height) as usize];
+    // tiles.par_iter().for_each(|&(tile_x, tile_y)| {
+    //     // Create buffer of correct size: 4096x4096
+    //     let mut tile_data = vec![0.0f32; (tile_width * tile_height) as usize];
 
-        let start_x = tile_x as u32 * tile_width;
-        let start_y = tile_y as u32 * tile_height;
+    //     let start_x = tile_x as u32 * tile_width;
+    //     let start_y = tile_y as u32 * tile_height;
 
-        println!(
-            "Processing tile {}_{}: starts at ({}, {}), dimensions {}x{}",
-            tile_x, tile_y, start_x, start_y, tile_width, tile_height
-        );
+    //     println!(
+    //         "Processing tile {}_{}: starts at ({}, {}), dimensions {}x{}",
+    //         tile_x, tile_y, start_x, start_y, tile_width, tile_height
+    //     );
 
-        // Now we'll sample the full 4096x4096 region
-        for y in 0..tile_height {
-            for x in 0..tile_width {
-                let src_x = start_x + x;
-                let src_y = start_y + y;
-                let src_idx = src_y * upscaled_width + src_x;
-                let dst_idx = y * tile_width + x;
-                tile_data[dst_idx as usize] = upscaled_nearest[src_idx as usize];
-            }
-        }
+    //     // Now we'll sample the full 4096x4096 region
+    //     for y in 0..tile_height {
+    //         for x in 0..tile_width {
+    //             let src_x = start_x + x;
+    //             let src_y = start_y + y;
+    //             let src_idx = src_y * upscaled_width + src_x;
+    //             let dst_idx = y * tile_width + x;
+    //             tile_data[dst_idx as usize] = upscaled_nearest[src_idx as usize];
+    //         }
+    //     }
 
-        // Save the full-sized tile...
-        let tile_path = output_dir.join(format!("tile_{}_{}.tiff", tile_x, tile_y));
-        let mut file = File::create(&tile_path).expect("Failed to create tile file");
+    //     // Save the full-sized tile...
+    //     let tile_path = output_dir.join(format!("tile_{}_{}.tiff", tile_x, tile_y));
+    //     let mut file = File::create(&tile_path).expect("Failed to create tile file");
 
-        let mut tiff = TiffEncoder::new(&mut file).unwrap();
-        tiff.write_image::<colortype::Gray32Float>(tile_width, tile_height, &tile_data)
-            .unwrap_or_else(|e| panic!("Failed to write tile {}_{}: {}", tile_x, tile_y, e));
-    });
+    //     let mut tiff = TiffEncoder::new(&mut file).unwrap();
+    //     tiff.write_image::<colortype::Gray32Float>(tile_width, tile_height, &tile_data)
+    //         .unwrap_or_else(|e| panic!("Failed to write tile {}_{}: {}", tile_x, tile_y, e));
+    // });
 
     println!("upscale finsihed!");
 
-    Ok(tiles.len())
+    let landscape_data = get_landscape_pixels(
+        project_id,
+        asset_id,
+        input_path
+            .to_str()
+            .expect("Couldn't make string")
+            .to_string(), // doesnt matter on upscaled
+        true,
+    );
+
+    let mut chunked_terrain_generator = ChunkedTerrainGenerator::new(
+        output_dir
+            .join("lod_1.mdbf")
+            .to_str()
+            .expect("Couldn't make string")
+            .to_string(),
+        1,
+    );
+    chunked_terrain_generator.generate_terrain(&landscape_data, 1.0, |_| {
+        // println!("Generating Vertices Progress...");
+    });
+
+    println!("Generated LOD 1 Vertices!");
+
+    let mut chunked_terrain_generator = ChunkedTerrainGenerator::new(
+        output_dir
+            .join("lod_4.mdbf")
+            .to_str()
+            .expect("Couldn't make string")
+            .to_string(),
+        4,
+    );
+    chunked_terrain_generator.generate_terrain(&landscape_data, 1.0, |_| {
+        // println!("Generating Vertices Progress...");
+    });
+
+    println!("Generated LOD 4 Vertices!");
+
+    let mut chunked_terrain_generator = ChunkedTerrainGenerator::new(
+        output_dir
+            .join("lod_8.mdbf")
+            .to_str()
+            .expect("Couldn't make string")
+            .to_string(),
+        8,
+    );
+    chunked_terrain_generator.generate_terrain(&landscape_data, 1.0, |_| {
+        // println!("Generating Vertices Progress...");
+    });
+
+    println!("Generated LOD 8 Vertices!");
+
+    let mut chunked_terrain_generator = ChunkedTerrainGenerator::new(
+        output_dir
+            .join("lod_16.mdbf")
+            .to_str()
+            .expect("Couldn't make string")
+            .to_string(),
+        16,
+    );
+    chunked_terrain_generator.generate_terrain(&landscape_data, 1.0, |_| {
+        // println!("Generating Vertices Progress...");
+    });
+
+    println!("Generated LOD 16 Vertices!");
+
+    Ok(0)
 }
 
 fn bilinear_interpolate(p11: f32, p12: f32, p21: f32, p22: f32, x: f32, y: f32) -> f32 {

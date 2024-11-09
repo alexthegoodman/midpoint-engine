@@ -322,9 +322,22 @@ pub fn handle_add_landscape(
 
     let mut state_guard = state.lock().unwrap();
 
-    let data = get_landscape_pixels(projectId, landscapeAssetId, landscapeFilename);
+    let data = get_landscape_pixels(
+        projectId.clone(),
+        landscapeAssetId.clone(),
+        landscapeFilename,
+        true,
+    );
 
-    state_guard.add_landscape(device, queue, &landscapeComponentId, &data, position);
+    state_guard.add_landscape(
+        device,
+        queue,
+        &landscapeComponentId,
+        &data,
+        position,
+        projectId.clone(),
+        landscapeAssetId.clone(),
+    );
 
     drop(state_guard);
 
