@@ -919,6 +919,8 @@ impl TerrainBuffers {
             let mut radius: i32 = 0;
             let max_radius: i32 = grid_size / 2; // Limit search radius
 
+            println!("max_radius {:?}", max_radius);
+
             'expansion: while radius < max_radius {
                 // Check all cells in the current "ring"
                 for dy in -radius..=radius {
@@ -938,9 +940,10 @@ impl TerrainBuffers {
                         let grid_y = center_grid_y as f32 + dy;
 
                         // Skip if outside grid bounds
-                        if grid_x < 0.0
-                            || grid_x >= grid_size as f32
-                            || grid_y < 0.0
+                        if
+                        //grid_x < 0.0 ||
+                        grid_x >= grid_size as f32
+                            //|| grid_y < 0.0
                             || grid_y >= grid_size as f32
                         {
                             continue;
@@ -948,11 +951,25 @@ impl TerrainBuffers {
 
                         // Convert to vertex index
                         let idx = (grid_y * grid_size as f32 + grid_x) as usize;
+
+                        println!(
+                            "Grid coords: center({}, {}) + offset({}, {}) = ({}, {}) -> idx: {} -> pos: {:?}",
+                            center_grid_x, center_grid_y,
+                            dx, dy,
+                            grid_x, grid_y,
+                            idx,
+                            lod.vertices[idx].position
+                        );
+
                         if idx >= lod.vertices.len() {
                             continue;
                         }
 
                         // Check if vertex is in range
+                        // println!(
+                        //     "check in range {:?} {:?} {:?}",
+                        //     lod.vertices[idx].position, min_distance, max_distance
+                        // );
                         if is_in_range(&lod.vertices[idx], camera_pos, min_distance, max_distance) {
                             included_vertices.push(idx);
                         } else {
@@ -967,7 +984,7 @@ impl TerrainBuffers {
                         }
                     }
                 }
-                radius += sample_stride as i32;
+                radius += 1_000 as i32; // hardcode 10 for now
             }
 
             // Sort indices to maintain proper order
