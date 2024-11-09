@@ -88,8 +88,10 @@ impl Landscape {
                 .fold(f32::NEG_INFINITY, |a, &b| a.max(b))
         );
 
-        let square_size = 1024.0 * 100.0;
+        // let square_size = 1024.0 * 100.0;
         // let square_height = 1858.0;
+        let square_size = 1024.0 * 4.0;
+        let square_height = 150.0;
 
         // Create terrain size that matches your actual terrain dimensions
         let terrain_size = Vector::new(

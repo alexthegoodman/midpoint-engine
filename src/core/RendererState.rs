@@ -1,4 +1,5 @@
 use floem::keyboard::ModifiersState;
+use gltf::json::camera;
 use nalgebra::{Isometry3, Point3, Vector3};
 use rapier3d::math::Point as RapierPoint;
 use rapier3d::prelude::*;
@@ -9,6 +10,7 @@ use wgpu::BindGroupLayout;
 use crate::animations::render_skeleton::SkeletonRenderPart;
 use crate::animations::skeleton::Joint;
 use crate::handlers::get_camera;
+use crate::landscapes::LandscapeLOD::TerrainManager;
 use crate::{
     core::Texture::Texture,
     helpers::saved_data::{ComponentData, ComponentKind},
@@ -91,8 +93,9 @@ pub struct RendererState {
     pub pyramids: Vec<Pyramid>,
     pub grids: Vec<Grid>,
     pub models: Vec<Model>,
-    pub landscapes: Vec<Landscape>,
+    // pub landscapes: Vec<Landscape>,
     pub skeleton_parts: Vec<SkeletonRenderPart>, // will contain buffers and the like
+    pub terrain_managers: Vec<TerrainManager>,
 
     // wgpu
     pub model_bind_group_layout: Arc<wgpu::BindGroupLayout>,
@@ -202,7 +205,9 @@ impl RendererState {
 
         let mut models = Vec::new();
 
-        let mut landscapes = Vec::new();
+        // let mut landscapes = Vec::new();
+
+        let mut terrain_managers = Vec::new();
 
         let mut skeleton_parts = Vec::new();
 
@@ -284,8 +289,9 @@ impl RendererState {
             pyramids,
             grids,
             models,
-            landscapes,
+            // landscapes,
             skeleton_parts,
+            terrain_managers,
 
             // device,
             // queue,
@@ -344,7 +350,7 @@ impl RendererState {
         }
     }
 
-    pub fn step_physics_pipeline(&mut self) {
+    pub fn step_physics_pipeline(&mut self, device: &wgpu::Device) {
         // Calculate delta time
         let now = std::time::Instant::now();
         let dt = if let Some(last_time) = self.last_frame_time {
@@ -353,6 +359,8 @@ impl RendererState {
             0.0
         };
         self.last_frame_time = Some(now);
+
+        self.update_terrain_managers(device, dt);
 
         // Step the physics pipeline
         let physics_hooks = ();
@@ -439,15 +447,15 @@ impl RendererState {
             }
 
             // Update landscapes
-            if let Some(instance_landscape_data) = self
-                .landscapes
+            if let Some(terrain_manager) = self
+                .terrain_managers
                 .iter_mut()
                 .find(|m| m.id == component_id.to_string())
             {
-                instance_landscape_data
+                terrain_manager
                     .transform
                     .update_position([position.x, position.y, position.z]);
-                instance_landscape_data
+                terrain_manager
                     .transform
                     .update_rotation([euler.0, euler.1, euler.2]);
             }
@@ -677,49 +685,51 @@ impl RendererState {
         //arrows: &[AxisArrow; 3],
         position: [f32; 3],
     ) {
-        self.landscapes.iter().for_each(|landscape| {
+        self.terrain_managers.iter().for_each(|landscape| {
             // Create translation vector based on the arrow's axis
             let translation = vector![position[0], position[1], position[2]];
 
             let isometry =
                 nalgebra::Isometry3::translation(translation.x, translation.y, translation.z);
 
-            if let Some(collider) = self.collider_set.get_mut(
-                landscape
-                    .collider_handle
-                    .expect("Couldn't get landscape collider handle"),
-            ) {
-                collider.set_position(isometry);
-            }
+            // if let Some(collider) = self.collider_set.get_mut(
+            //     landscape
+            //         .collider_handle
+            //         .expect("Couldn't get landscape collider handle"),
+            // ) {
+            //     collider.set_position(isometry);
+            // }
+
+            // TODO: try this:
+            // landscape.terrain_position = isometry
         });
     }
 
     pub fn add_collider(&mut self, component_id: String, component_kind: ComponentKind) {
         match component_kind {
             ComponentKind::Landscape => {
-                let renderer_landscape = self
-                    .landscapes
-                    .iter_mut()
-                    .find(|l| l.id == component_id.clone())
-                    .expect("Couldn't get Renderer Landscape");
+                // should be added as part of terrain manager
+                // let terrain_manager = self
+                //     .terrain_managers
+                //     .iter_mut()
+                //     .find(|l| l.id == component_id.clone())
+                //     .expect("Couldn't get Renderer Landscape");
 
-                // let collider_handle = self
-                //     .collider_set
-                //     .insert(renderer_landscape.rapier_heightfield.clone());
-                // renderer_landscape.collider_handle = Some(collider_handle);
+                // // TODO: need to collect current rigid bodies on nodes to add to rigidbodyset
+                // // I should probably clear the set somehow before resetting it here
 
-                let rigid_body_handle = self
-                    .rigid_body_set
-                    .insert(renderer_landscape.rapier_rigidbody.clone());
-                renderer_landscape.rigid_body_handle = Some(rigid_body_handle);
+                // let rigid_body_handle = self
+                //     .rigid_body_set
+                //     .insert(current_node.rapier_rigidbody.clone());
+                // current_node.rigid_body_handle = Some(rigid_body_handle);
 
-                // now associate rigidbody with collider
-                let collider_handle = self.collider_set.insert_with_parent(
-                    renderer_landscape.rapier_heightfield.clone(),
-                    rigid_body_handle,
-                    &mut self.rigid_body_set,
-                );
-                renderer_landscape.collider_handle = Some(collider_handle);
+                // // now associate rigidbody with collider
+                // let collider_handle = self.collider_set.insert_with_parent(
+                //     current_node.rapier_heightfield.clone(),
+                //     rigid_body_handle,
+                //     &mut self.rigid_body_set,
+                // );
+                // current_node.collider_handle = Some(collider_handle);
             }
             ComponentKind::Model => {
                 let renderer_model = self
@@ -729,9 +739,6 @@ impl RendererState {
                     .expect("Couldn't get Renderer Model");
 
                 renderer_model.meshes.iter_mut().for_each(|mesh| {
-                    // let collider_handle = self.collider_set.insert(mesh.rapier_collider.clone());
-                    // mesh.collider_handle = Some(collider_handle);
-
                     let rigid_body_handle =
                         self.rigid_body_set.insert(mesh.rapier_rigidbody.clone());
                     mesh.rigid_body_handle = Some(rigid_body_handle);
@@ -774,27 +781,71 @@ impl RendererState {
         self.models.push(model);
     }
 
-    pub fn add_landscape(
+    // pub fn add_landscape(
+    //     &mut self,
+    //     device: &wgpu::Device,
+    //     queue: &wgpu::Queue,
+    //     landscapeComponentId: &String,
+    //     data: &LandscapePixelData,
+    //     position: [f32; 3],
+    // ) {
+    //     let landscape = Landscape::new(
+    //         landscapeComponentId,
+    //         data,
+    //         device,
+    //         queue,
+    //         &self.model_bind_group_layout,
+    //         &self.texture_bind_group_layout,
+    //         // &self.texture_render_mode_buffer,
+    //         &self.color_render_mode_buffer,
+    //         position,
+    //     );
+
+    //     self.landscapes.push(landscape);
+    // }
+
+    pub fn update_terrain_managers(&mut self, device: &wgpu::Device, dt: f32) {
+        if self.terrain_managers.len() > 0 {
+            let camera = get_camera();
+            let terrain_manager = self
+                .terrain_managers
+                .get_mut(0)
+                .expect("Couldn't get first terrain manager");
+            terrain_manager.update(
+                [camera.position.x, camera.position.y, camera.position.z],
+                device,
+                &mut self.rigid_body_set,
+                &mut self.collider_set,
+                &mut self.island_manager,
+                &mut self.impulse_joint_set,
+                &mut self.multibody_joint_set, // terrain_manager.terrain_position,
+                // terrain_manager.id.clone(),
+                dt,
+            );
+        }
+    }
+
+    pub fn add_terrain_manager(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        landscapeComponentId: &String,
-        data: &LandscapePixelData,
+        projectId: String,
+        landscapeAssetId: String,
+        landscapeComponentId: String,
+        landscapeFilename: String,
         position: [f32; 3],
     ) {
-        let landscape = Landscape::new(
+        let terrain_manager = TerrainManager::new(
+            projectId,
             landscapeComponentId,
-            data,
+            landscapeAssetId,
+            landscapeFilename,
             device,
-            queue,
             &self.model_bind_group_layout,
-            &self.texture_bind_group_layout,
-            // &self.texture_render_mode_buffer,
-            &self.color_render_mode_buffer,
             position,
         );
 
-        self.landscapes.push(landscape);
+        self.terrain_managers.push(terrain_manager);
     }
 
     pub fn update_landscape_texture(
@@ -807,8 +858,12 @@ impl RendererState {
         maskKind: LandscapeTextureKinds,
         mask: Texture,
     ) {
-        if let Some(landscape) = self.landscapes.iter_mut().find(|l| l.id == landscape_id) {
-            landscape.update_texture(
+        if let Some(terrain_manager) = self
+            .terrain_managers
+            .iter_mut()
+            .find(|l| l.id == landscape_id)
+        {
+            terrain_manager.update_texture(
                 device,
                 queue,
                 &self.texture_bind_group_layout,
@@ -817,7 +872,7 @@ impl RendererState {
                 kind,
                 &texture,
             );
-            landscape.update_texture(
+            terrain_manager.update_texture(
                 device,
                 queue,
                 &self.texture_bind_group_layout,

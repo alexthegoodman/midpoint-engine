@@ -294,7 +294,7 @@ impl MeleeCombatBehavior {
         // State machine logic
         match self.state_machine {
             CombatState::Chasing => {
-                println!("Chasing");
+                // println!("Chasing");
                 self.chase.update(
                     rigid_body_set,
                     collider_set,
@@ -323,7 +323,7 @@ impl MeleeCombatBehavior {
                 None
             }
             CombatState::Attacking => {
-                println!("Attacking");
+                // println!("Attacking");
                 let damage = self.attack.update(
                     rigid_body_set,
                     collider_set,
@@ -350,7 +350,7 @@ impl MeleeCombatBehavior {
                 damage
             }
             CombatState::Evading => {
-                println!("Evading");
+                // println!("Evading");
                 let is_evading = self.evade.update(
                     rigid_body_set,
                     collider_set,
@@ -369,7 +369,7 @@ impl MeleeCombatBehavior {
                 None
             }
             CombatState::Defending => {
-                println!("Defending");
+                // println!("Defending");
                 // Transition back to chasing after defense
                 if state_duration >= min_state_duration {
                     self.state_machine = CombatState::Chasing;

@@ -31,6 +31,7 @@ impl Transform {
             Matrix4::from_euler_angles(self.rotation.x, self.rotation.y, self.rotation.z);
         let scale = Matrix4::new_nonuniform_scaling(&self.scale);
         // web_sys::console::log_1(&format!("Pyramid translation: {:?}", translation).into());
+        println!("Update transform: {:?}", self.position);
         translation * rotation * scale
     }
 

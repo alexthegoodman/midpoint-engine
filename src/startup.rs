@@ -81,7 +81,7 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
                     engine.update_rapier();
 
                     // step through physics each frame
-                    engine.step_physics_pipeline();
+                    engine.step_physics_pipeline(&gpu_resources.device);
 
                     // continue with visuals
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -161,6 +161,8 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
                     // TODO: bad to call on every frame? pretty sure its called when needed
                     camera.update();
 
+                    // println!("camera pos {:?}", camera.position);
+
                     let camera_matrix = camera.view_projection_matrix;
                     gpu_resources.queue.write_buffer(
                         &engine.camera_uniform_buffer,
@@ -202,30 +204,13 @@ fn create_render_callback<'a>() -> Box<RenderCallback<'a>> {
                         }
                     }
 
-                    for landscape in &engine.landscapes {
-                        if (landscape.texture_bind_group.is_some()) {
-                            landscape
-                                .transform
-                                .update_uniform_buffer(&gpu_resources.queue);
-                            render_pass.set_bind_group(0, &engine.camera_bind_group, &[]);
-                            render_pass.set_bind_group(1, &landscape.bind_group, &[]);
-                            render_pass.set_bind_group(
-                                2,
-                                &landscape
-                                    .texture_bind_group
-                                    .as_ref()
-                                    .expect("No landscape texture bind group"),
-                                &[],
-                            );
-
-                            render_pass.set_vertex_buffer(0, landscape.vertex_buffer.slice(..));
-                            render_pass.set_index_buffer(
-                                landscape.index_buffer.slice(..),
-                                wgpu::IndexFormat::Uint32,
-                            );
-
-                            render_pass.draw_indexed(0..landscape.index_count as u32, 0, 0..1);
-                        }
+                    // Render all terrain managers
+                    for terrain_manager in &engine.terrain_managers {
+                        terrain_manager.render(
+                            &mut render_pass,
+                            &engine.camera_bind_group,
+                            &gpu_resources.queue,
+                        );
                     }
                 }
 
@@ -1011,24 +996,24 @@ pub fn restore_renderer_from_saved(
             println!("onward...");
 
             // restore generic properties like position
-            let mut renderer_state_guard = renderer_state.lock().unwrap();
+            // let mut renderer_state_guard = renderer_state.lock().unwrap();
 
-            let mut renderer_landscape = renderer_state_guard
-                .landscapes
-                .iter_mut()
-                .find(|l| l.id == component.id.clone())
-                .expect("Couldn't get Renderer Landscape");
+            // let mut renderer_landscape = renderer_state_guard
+            //     .landscapes
+            //     .iter_mut()
+            //     .find(|l| l.id == component.id.clone())
+            //     .expect("Couldn't get Renderer Landscape");
 
-            renderer_landscape.transform.update_position(position);
-            // including rapier!
-            // Convert euler angles (Vector3) to Quaternion/Isometry
-            let isometry = nalgebra::Isometry3::new(
-                vector![position[0], position[1], position[2]],
-                // vector![-50.0, -50.0, -50.0],
-                vector![rotation[0], rotation[1], rotation[2]],
-            );
+            // renderer_landscape.transform.update_position(position);
+            // // including rapier!
+            // // Convert euler angles (Vector3) to Quaternion/Isometry
+            // let isometry = nalgebra::Isometry3::new(
+            //     vector![position[0], position[1], position[2]],
+            //     // vector![-50.0, -50.0, -50.0],
+            //     vector![rotation[0], rotation[1], rotation[2]],
+            // );
 
-            drop(renderer_state_guard);
+            // drop(renderer_state_guard);
 
             let mut renderer_state_guard = renderer_state.lock().unwrap();
 

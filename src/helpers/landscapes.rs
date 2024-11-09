@@ -12,6 +12,7 @@ pub struct LandscapePixelData {
     // data: Vec<u8>,
     pub pixel_data: Vec<Vec<PixelData>>,
     pub rapier_heights: na::DMatrix<f32>,
+    pub raw_heights: Vec<f32>,
 }
 
 #[derive(Serialize)]
@@ -35,7 +36,13 @@ pub fn read_tiff_heightmap(
     target_width: f32,
     target_length: f32,
     target_height: f32,
-) -> (usize, usize, Vec<Vec<PixelData>>, na::DMatrix<f32>) {
+) -> (
+    usize,
+    usize,
+    Vec<Vec<PixelData>>,
+    na::DMatrix<f32>,
+    Vec<f32>,
+) {
     // Added DMatrix return
     let file = File::open(landscape_path).expect("Couldn't open tif file");
     let mut decoder = Decoder::new(file).expect("Couldn't decode tif file");
@@ -50,12 +57,13 @@ pub fn read_tiff_heightmap(
         .expect("Couldn't read image data from tif")
     {
         DecodingResult::F32(vec) => vec,
-        _ => return (0, 0, Vec::new(), na::DMatrix::zeros(0, 0)),
+        _ => return (0, 0, Vec::new(), na::DMatrix::zeros(0, 0), Vec::new()),
     };
 
     println!("Continuing!");
 
     let mut pixel_data = Vec::new();
+    let mut raw_heights = Vec::new();
     // Create the heights matrix for the collider
     let mut heights = na::DMatrix::zeros(height, width);
 
@@ -84,6 +92,7 @@ pub fn read_tiff_heightmap(
             // Set the height in the DMatrix
             heights[(y, x)] = height_value;
             // heights[(x, y)] = height_value;
+            raw_heights.push(height_value);
 
             let position = [
                 x as f32 * x_scale - target_width / 2.0,
@@ -103,7 +112,7 @@ pub fn read_tiff_heightmap(
 
     println!("Tiff heightmap finished!");
 
-    (width, height, pixel_data, heights)
+    (width, height, pixel_data, heights, raw_heights)
 }
 
 pub fn get_landscape_pixels(
@@ -122,13 +131,18 @@ pub fn get_landscape_pixels(
         "midpoint/projects/{}/landscapes/{}/heightmaps",
         projectId, landscapeAssetId
     ));
-    let landscape_path = landscapes_dir.join(landscapeFilename);
+    // let landscape_path = landscapes_dir.join(landscapeFilename);
+    let landscape_path = landscapes_dir
+        .join("upscaled")
+        .join("upscaled_heightmap.tiff");
 
     println!("landscape_path {:?}", landscape_path);
 
-    let square_size = 1024.0 * 100.0;
-    let square_height = 1858.0 * 10.0;
-    let (width, height, pixel_data, rapier_heights) = read_tiff_heightmap(
+    // let square_size = 1024.0 * 100.0;
+    // let square_height = 1858.0 * 10.0;
+    let square_size = 1024.0 * 4.0;
+    let square_height = 150.0;
+    let (width, height, pixel_data, rapier_heights, raw_heights) = read_tiff_heightmap(
         landscape_path
             .to_str()
             .expect("Couldn't form landscape string"),
@@ -148,6 +162,7 @@ pub fn get_landscape_pixels(
         // data: heightmap.to_vec(),
         pixel_data,
         rapier_heights,
+        raw_heights,
     }
 }
 
