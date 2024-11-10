@@ -4,6 +4,7 @@ use rapier3d::prelude::*;
 use rapier3d::prelude::{Collider, ColliderBuilder, RigidBody, RigidBodyBuilder};
 use std::num::NonZeroU32;
 use std::str::FromStr;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
 use util::BufferInitDescriptor;
 use uuid::Uuid;
@@ -43,6 +44,7 @@ pub struct Rect {
 
 #[derive(Debug)]
 pub struct TerrainMesh {
+    pub mesh_id: String,
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
     pub index_count: u32,
@@ -50,6 +52,8 @@ pub struct TerrainMesh {
     pub rigid_body: Option<RigidBody>,
     pub depth: u32,
 }
+
+const PHYSICS_DISTANCE: f32 = 150.0;
 
 impl QuadNode {
     pub fn new(
@@ -59,6 +63,7 @@ impl QuadNode {
         device: &Device,
         terrain_position: [f32; 3],
         landscape_component_id: String,
+        collider_sender: Sender<ColliderMessage>,
     ) -> Self {
         let depth = 0;
         Self {
@@ -73,6 +78,7 @@ impl QuadNode {
                 terrain_position,
                 landscape_component_id,
                 depth,
+                collider_sender,
             )),
             debug_mesh: None,
             rigid_body_handle: None,
@@ -132,18 +138,19 @@ impl QuadNode {
         // if self.depth >= min_physics_depth {
         if let Some(ref mut mesh) = self.mesh {
             // Get rigid body
-            if let Some(rigid_body) = mesh.rigid_body.take() {
-                let rigid_body_handle = rigid_body_set.insert(rigid_body);
+            // if let Some(rigid_body) = mesh.rigid_body.take() {
+            if let Some(ref rigid_body) = mesh.rigid_body {
+                let rigid_body_handle = rigid_body_set.insert(rigid_body.clone());
                 self.rigid_body_handle = Some(rigid_body_handle);
-
                 // Create and attach collider if we have one
-                if let Some(collider) = mesh.collider.take() {
+                // if let Some(collider) = mesh.collider.take() {
+                if let Some(ref collider) = mesh.collider {
                     // if let Some(debug_mesh) = create_debug_collision_mesh(&collider, device) {
                     //     self.debug_mesh = Some(debug_mesh);
                     // }
 
                     let collider_handle = collider_set.insert_with_parent(
-                        collider,
+                        collider.clone(),
                         rigid_body_handle,
                         rigid_body_set,
                     );
@@ -168,6 +175,7 @@ impl QuadNode {
         device: &Device,
         terrain_position: [f32; 3],
         landscape_component_id: String,
+        collider_sender: Sender<ColliderMessage>,
     ) {
         if self.depth >= max_depth {
             return;
@@ -201,6 +209,7 @@ impl QuadNode {
                     terrain_position,
                     landscape_component_id.clone(),
                     self.depth + 1,
+                    collider_sender.clone(),
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -232,6 +241,7 @@ impl QuadNode {
                     terrain_position,
                     landscape_component_id.clone(),
                     self.depth + 1,
+                    collider_sender.clone(),
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -263,6 +273,7 @@ impl QuadNode {
                     terrain_position,
                     landscape_component_id.clone(),
                     self.depth + 1,
+                    collider_sender.clone(),
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -294,6 +305,7 @@ impl QuadNode {
                     terrain_position,
                     landscape_component_id.clone(),
                     self.depth + 1,
+                    collider_sender.clone(),
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -313,38 +325,7 @@ impl QuadNode {
         lod_distances: &[f32],
         transform_position: [f32; 3],
     ) -> bool {
-        // Get node corners in world space
-        let corners = [
-            // Near corners
-            [
-                transform_position[0] + self.bounds.x,
-                transform_position[1],
-                transform_position[2] + self.bounds.z,
-            ],
-            [
-                transform_position[0] + self.bounds.x + self.bounds.width,
-                transform_position[1],
-                transform_position[2] + self.bounds.z,
-            ],
-            // Far corners
-            [
-                transform_position[0] + self.bounds.x,
-                transform_position[1],
-                transform_position[2] + self.bounds.z + self.bounds.height,
-            ],
-            [
-                transform_position[0] + self.bounds.x + self.bounds.width,
-                transform_position[1],
-                transform_position[2] + self.bounds.z + self.bounds.height,
-            ],
-        ];
-
-        // Find closest point to camera
-        let closest_dist = corners
-            .iter()
-            .map(|corner| distance_squared(camera_pos, *corner))
-            .reduce(f32::min)
-            .unwrap_or(f32::MAX);
+        let closest_dist = get_camera_distance_from_bounds(self.bounds.clone(), transform_position);
 
         // Calculate node size (diagonal)
         let node_size = (self.bounds.width * self.bounds.width
@@ -378,6 +359,7 @@ impl QuadNode {
         device: &Device,
         terrain_position: [f32; 3],
         landscape_component_id: String,
+        collider_sender: Sender<ColliderMessage>,
     ) -> bool {
         if self.depth >= max_depth {
             return false;
@@ -396,6 +378,7 @@ impl QuadNode {
                     device,
                     terrain_position,
                     landscape_component_id.clone(),
+                    collider_sender.clone(),
                 );
                 state_changed = true;
             }
@@ -428,6 +411,7 @@ impl QuadNode {
                     device,
                     terrain_position,
                     landscape_component_id.clone(),
+                    collider_sender.clone(),
                 ) {
                     state_changed = true;
                 }
@@ -456,6 +440,7 @@ impl QuadNode {
         impulse_joint_set: &mut ImpulseJointSet,
         multibody_joint_set: &mut MultibodyJointSet,
         device: &wgpu::Device,
+        transform_position: [f32; 3],
     ) -> bool {
         // Returns true if any physics were updated
         if !self.lod_dirty {
@@ -469,25 +454,34 @@ impl QuadNode {
                         impulse_joint_set,
                         multibody_joint_set,
                         device,
+                        transform_position,
                     )
                 });
             }
             return false;
         }
 
-        // Clean up existing physics components for this node
-        self.cleanup_physics(
-            rigid_body_set,
-            collider_set,
-            island_manager,
-            impulse_joint_set,
-            multibody_joint_set,
-        );
+        let closest_dist =
+            get_camera_distance_from_bounds_rel(self.bounds.clone(), transform_position).sqrt();
 
-        // Add new physics components if needed
-        if self.children.is_none() {
-            // Only leaf nodes get physics components
-            self.add_physics_components(rigid_body_set, collider_set, device);
+        // TODO: set to reasonable amount
+        if (closest_dist < PHYSICS_DISTANCE) {
+            println!("closest_dist on physics {:?}", closest_dist);
+            // Clean up existing physics components for this node
+            self.cleanup_physics(
+                rigid_body_set,
+                collider_set,
+                island_manager,
+                impulse_joint_set,
+                multibody_joint_set,
+            );
+
+            // Add new physics components if needed
+            if self.children.is_none() {
+                // Only leaf nodes get physics components
+                // this merely adds them to sets, does not create them
+                self.add_physics_components(rigid_body_set, collider_set, device);
+            }
         }
 
         // Recursively update children's physics
@@ -500,6 +494,7 @@ impl QuadNode {
                     impulse_joint_set,
                     multibody_joint_set,
                     device,
+                    transform_position,
                 );
             }
         }
@@ -600,7 +595,9 @@ impl QuadNode {
         terrain_position: [f32; 3],
         landscape_component_id: String,
         depth: u32,
+        collider_sender: Sender<ColliderMessage>,
     ) -> TerrainMesh {
+        let mesh_id = Uuid::new_v4().to_string();
         let calc_res = Self::get_resolution_for_depth(depth);
         let mut vertices = Vec::with_capacity((resolution * resolution) as usize);
         let mut indices = Vec::with_capacity(((resolution - 1) * (resolution - 1) * 6) as usize);
@@ -747,45 +744,108 @@ impl QuadNode {
         //     )
         //     .build();
 
-        let terrain_collider = ColliderBuilder::trimesh(
-            rapier_vertices,
-            indices
-                .chunks(3)
-                .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-                .collect::<Vec<[u32; 3]>>(),
-        )
-        .user_data(
-            Uuid::from_str(&landscape_component_id)
-                .expect("Couldn't extract uuid")
-                .as_u128(),
-        )
-        .build();
+        let closest_dist =
+            get_camera_distance_from_bounds_rel(bounds.clone(), terrain_position).sqrt();
 
-        // Create the ground as a fixed rigid body
+        println!("closest_dist {:?}", closest_dist);
 
-        println!(
-            "insert landscape rigidbody position {:?} {:?} {:?}",
-            depth, bounds, terrain_position
-        );
+        // TODO: set to reasonable amount
+        if (closest_dist < PHYSICS_DISTANCE) {
+            // let collider_time = Instant::now();
 
-        let ground_rigid_body = RigidBodyBuilder::fixed()
-            .position(isometry)
-            // .translation(translation)
-            .user_data(
-                Uuid::from_str(&landscape_component_id)
-                    .expect("Couldn't extract uuid")
-                    .as_u128(),
-            )
-            .sleeping(false)
-            .build();
+            // let terrain_collider = ColliderBuilder::trimesh(
+            //     rapier_vertices,
+            //     indices
+            //         .chunks(3)
+            //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+            //         .collect::<Vec<[u32; 3]>>(),
+            // )
+            // .user_data(
+            //     Uuid::from_str(&landscape_component_id)
+            //         .expect("Couldn't extract uuid")
+            //         .as_u128(),
+            // )
+            // .build();
 
-        TerrainMesh {
-            vertex_buffer,
-            index_buffer,
-            index_count: indices.len() as u32,
-            collider: Some(terrain_collider),
-            rigid_body: Some(ground_rigid_body),
-            depth,
+            // let collider_duration = collider_time.elapsed();
+            // println!("  collider_duration: {:?}", collider_duration);
+
+            let sender = collider_sender.clone();
+            let vertices = rapier_vertices.clone();
+            let indices_clone = indices.clone();
+            let chunk_id = mesh_id.clone();
+
+            // Spawn the heavy computation in a separate thread
+            std::thread::spawn(move || {
+                let collider = ColliderBuilder::trimesh(
+                    vertices,
+                    indices_clone
+                        .chunks(3)
+                        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+                        .collect::<Vec<[u32; 3]>>(),
+                )
+                .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
+                .build();
+
+                // Send the completed collider back
+                sender.send((chunk_id, collider)).unwrap();
+            });
+
+            // Create the ground as a fixed rigid body
+
+            println!(
+                "insert landscape rigidbody position {:?} {:?} {:?}",
+                depth, bounds, terrain_position
+            );
+
+            let rigid_time = Instant::now();
+
+            let ground_rigid_body = RigidBodyBuilder::fixed()
+                .position(isometry)
+                // .translation(translation)
+                .user_data(
+                    Uuid::from_str(&landscape_component_id)
+                        .expect("Couldn't extract uuid")
+                        .as_u128(),
+                )
+                .sleeping(false)
+                .build();
+
+            let rigid_duration = rigid_time.elapsed();
+            println!("  rigid_duration: {:?}", rigid_duration);
+
+            TerrainMesh {
+                mesh_id,
+                vertex_buffer,
+                index_buffer,
+                index_count: indices.clone().len() as u32,
+                collider: None,
+                rigid_body: Some(ground_rigid_body),
+                depth,
+            }
+        } else {
+            println!("not addressing most physics");
+
+            let ground_rigid_body = RigidBodyBuilder::fixed()
+                .position(isometry)
+                // .translation(translation)
+                .user_data(
+                    Uuid::from_str(&landscape_component_id)
+                        .expect("Couldn't extract uuid")
+                        .as_u128(),
+                )
+                .sleeping(false)
+                .build();
+
+            TerrainMesh {
+                mesh_id,
+                vertex_buffer,
+                index_buffer,
+                index_count: indices.clone().len() as u32,
+                collider: None,
+                rigid_body: Some(ground_rigid_body),
+                depth,
+            }
         }
     }
 }
@@ -877,6 +937,9 @@ fn sample_height(x: f32, z: f32, height_data: &[f32]) -> f32 {
     0.0
 }
 
+// Create type for the message we'll send through channel
+type ColliderMessage = (String, Collider); // (chunk_id, collider)
+
 // Main terrain manager
 pub struct TerrainManager {
     pub id: String,
@@ -893,6 +956,9 @@ pub struct TerrainManager {
     // Track time since last LOD update
     pub lod_update_timer: f32,
     pub lod_update_interval: f32, // e.g., 0.5 seconds
+
+    pub collider_sender: Sender<ColliderMessage>,
+    pub collider_receiver: Receiver<ColliderMessage>,
 }
 
 impl TerrainManager {
@@ -919,6 +985,8 @@ impl TerrainManager {
 
         println!("loaded heights... creating root quad...");
 
+        let (sender, receiver) = channel();
+
         // Create root node
         let root = QuadNode::new(
             Rect {
@@ -936,6 +1004,7 @@ impl TerrainManager {
             device,
             terrain_position,
             landscapeComponentId.clone(),
+            sender.clone(),
         );
 
         // set uniform buffer for transforms
@@ -977,7 +1046,9 @@ impl TerrainManager {
             texture_array_view: None,
             texture_bind_group: None,
             lod_update_timer: 0.0,
-            lod_update_interval: 5.0, // Configure as needed
+            lod_update_interval: 2.0, // Configure as needed
+            collider_sender: sender.clone(),
+            collider_receiver: receiver,
         }
     }
 
@@ -1006,6 +1077,31 @@ impl TerrainManager {
         }
     }
 
+    pub fn find_chunk_by_id(&mut self, chunk_id: &String) -> Option<&mut QuadNode> {
+        fn recurse_children<'a>(
+            node: &'a mut QuadNode,
+            chunk_id: &str,
+        ) -> Option<&'a mut QuadNode> {
+            if let Some(ref mesh) = node.mesh {
+                if mesh.mesh_id == chunk_id {
+                    return Some(node);
+                }
+            }
+
+            if let Some(ref mut children) = node.children {
+                for child in children.iter_mut() {
+                    if let Some(found) = recurse_children(child, &chunk_id) {
+                        return Some(found);
+                    }
+                }
+            }
+
+            None
+        }
+
+        recurse_children(&mut self.root, &chunk_id)
+    }
+
     pub fn update(
         &mut self,
         camera_pos: [f32; 3],
@@ -1018,6 +1114,26 @@ impl TerrainManager {
         delta_time: f32,
     ) {
         self.lod_update_timer += delta_time;
+
+        // Check for completed colliders
+        while let Ok((chunk_id, collider)) = self.collider_receiver.try_recv() {
+            // Find the relevant chunk and add the collider
+            if let Some(chunk) = self.find_chunk_by_id(&chunk_id) {
+                // Add collider to chunk's mesh
+                if let Some(ref mut mesh) = chunk.mesh {
+                    println!("attaching collider");
+                    // mesh.collider = Some(collider);
+                    // Now you can add it to physics world if needed
+                    add_physics_components_mini(
+                        rigid_body_set,
+                        collider_set,
+                        device,
+                        chunk,
+                        collider,
+                    );
+                }
+            }
+        }
 
         // Only update LOD and physics at specified intervals
         if self.lod_update_timer >= self.lod_update_interval {
@@ -1036,6 +1152,7 @@ impl TerrainManager {
                 device,
                 self.terrain_position,
                 self.id.clone(),
+                self.collider_sender.clone(),
             );
 
             let update_duration = update_time.elapsed();
@@ -1052,6 +1169,7 @@ impl TerrainManager {
                 impulse_joint_set,
                 multibody_joint_set,
                 device,
+                self.terrain_position,
             );
             // }
 
@@ -1219,6 +1337,145 @@ impl TerrainManager {
     }
 }
 
+pub fn get_camera_distance_from_bounds(bounds: Rect, transform_position: [f32; 3]) -> f32 {
+    let camera = get_camera();
+
+    // Get node corners in world space
+    let corners = [
+        // Near corners
+        [
+            transform_position[0] + bounds.x,
+            transform_position[1],
+            transform_position[2] + bounds.z,
+        ],
+        [
+            transform_position[0] + bounds.x + bounds.width,
+            transform_position[1],
+            transform_position[2] + bounds.z,
+        ],
+        // Far corners
+        [
+            transform_position[0] + bounds.x,
+            transform_position[1],
+            transform_position[2] + bounds.z + bounds.height,
+        ],
+        [
+            transform_position[0] + bounds.x + bounds.width,
+            transform_position[1],
+            transform_position[2] + bounds.z + bounds.height,
+        ],
+    ];
+
+    // Find closest point to camera
+    let closest_dist = corners
+        .iter()
+        .map(|corner| {
+            distance_squared(
+                [camera.position.x, camera.position.y, camera.position.z],
+                *corner,
+            )
+        })
+        .reduce(f32::min)
+        .unwrap_or(f32::MAX);
+
+    closest_dist
+}
+
+pub fn get_camera_distance_from_bounds_rel(bounds: Rect, transform_position: [f32; 3]) -> f32 {
+    let camera = get_camera();
+
+    // Get node corners in world space
+    let corners = [
+        // Near corners
+        [
+            transform_position[0] + bounds.x,
+            camera.position[1],
+            transform_position[2] + bounds.z,
+        ],
+        [
+            transform_position[0] + bounds.x + bounds.width,
+            camera.position[1],
+            transform_position[2] + bounds.z,
+        ],
+        // Far corners
+        [
+            transform_position[0] + bounds.x,
+            camera.position[1],
+            transform_position[2] + bounds.z + bounds.height,
+        ],
+        [
+            transform_position[0] + bounds.x + bounds.width,
+            camera.position[1],
+            transform_position[2] + bounds.z + bounds.height,
+        ],
+    ];
+
+    // Find closest point to camera
+    let closest_dist = corners
+        .iter()
+        .map(|corner| {
+            distance_squared(
+                [camera.position.x, camera.position.y, camera.position.z],
+                *corner,
+            )
+        })
+        .reduce(f32::min)
+        .unwrap_or(f32::MAX);
+
+    closest_dist
+}
+
+pub fn add_physics_components_mini(
+    rigid_body_set: &mut RigidBodySet,
+    collider_set: &mut ColliderSet,
+    device: &wgpu::Device,
+    // mesh: &mut TerrainMesh,
+    quad: &mut QuadNode,
+    collider: Collider,
+) {
+    // Only add physics for chunks at deeper levels (e.g., more detailed)
+    // let min_physics_depth = 2; // Tune this value
+    // if self.depth >= min_physics_depth {
+    println!("landscape collider add_physics_components");
+    if let Some(ref mut mesh) = quad.mesh {
+        // Get rigid body
+        println!("landscape collider self.mesh");
+        // if let Some(rigid_body) = mesh.rigid_body.take() {
+        if let Some(ref rigid_body) = mesh.rigid_body {
+            let rigid_body_handle = rigid_body_set.insert(rigid_body.clone());
+            quad.rigid_body_handle = Some(rigid_body_handle);
+            println!("landscape collider rigid_body");
+            // Create and attach collider if we have one
+            // if let Some(collider) = mesh.collider.take() {
+            //     // if let Some(debug_mesh) = create_debug_collision_mesh(&collider, device) {
+            //     //     self.debug_mesh = Some(debug_mesh);
+            //     // }
+
+            //     println!("landscape collider insert_with_parent");
+
+            //     let collider_handle =
+            //         collider_set.insert_with_parent(collider, rigid_body_handle, rigid_body_set);
+            //     quad.collider_handle = Some(collider_handle);
+            // }
+
+            // match &mesh.collider {
+            //     Some(_) => println!("Collider exists before take"),
+            //     None => println!("No collider before take"),
+            // }
+
+            // // Use as_ref() or clone() instead of take()
+            // if let Some(ref collider) = mesh.collider {
+            println!("landscape collider insert_with_parent");
+
+            let collider_handle =
+                collider_set.insert_with_parent(collider, rigid_body_handle, rigid_body_set);
+            quad.collider_handle = Some(collider_handle);
+            // }
+        }
+    }
+    // }
+}
+
 // Utility function to calculate squared distance between two 3D points
 pub fn distance_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     let dx = b[0] - a[0];
@@ -1315,6 +1572,7 @@ fn create_debug_collision_mesh(collider: &Collider, device: &Device) -> Option<T
         });
 
         Some(TerrainMesh {
+            mesh_id: "001".to_string(),
             vertex_buffer,
             index_buffer,
             index_count: indices.len() as u32,
