@@ -239,7 +239,7 @@ impl GameState {
             .expect("Couldn't get RendererState")
             .lock()
             .unwrap();
-        const MOVE_SPEED: f32 = 2.0;
+        const MOVE_SPEED: f32 = 20.0;
 
         if is_pressed {
             if let Some(rb_handle) = renderer_state.player_character.movement_rigid_body_handle {

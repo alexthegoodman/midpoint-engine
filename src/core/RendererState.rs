@@ -362,6 +362,8 @@ impl RendererState {
 
         self.update_terrain_managers(device, dt);
 
+        let step_time = Instant::now();
+
         // Step the physics pipeline
         let physics_hooks = ();
         let event_handler = ();
@@ -381,6 +383,9 @@ impl RendererState {
             &physics_hooks,
             &event_handler,
         );
+
+        let step_duration = step_time.elapsed();
+        // println!("  step_duration: {:?}", step_duration);
 
         // Collect all the necessary data first
         let physics_updates: Vec<(Uuid, nalgebra::Vector3<f32>, (f32, f32, f32))> = self

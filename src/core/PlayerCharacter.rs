@@ -91,7 +91,7 @@ impl PlayerCharacter {
         let dynamic_body = RigidBodyBuilder::dynamic()
             .additional_mass(70.0) // Explicitly set mass (e.g., 70kg for a person)
             .linear_damping(0.1)
-            .ccd_enabled(true)
+            // .ccd_enabled(true)
             .user_data(id.as_u128())
             .build();
 
@@ -112,7 +112,7 @@ impl PlayerCharacter {
             movement_rigid_body: dynamic_body,
             movement_rigid_body_handle: None,
             // hit_collider: Collider::convex_hull(&player_model_verts).unwrap(), // this is on the optional Model
-            movement_speed: 5.0,
+            movement_speed: 50.0,
             mouse_sensitivity: 0.003,
         }
     }

@@ -4,6 +4,7 @@ use rapier3d::prelude::*;
 use rapier3d::prelude::{Collider, ColliderBuilder, RigidBody, RigidBodyBuilder};
 use std::num::NonZeroU32;
 use std::str::FromStr;
+use std::time::Instant;
 use util::BufferInitDescriptor;
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
@@ -11,7 +12,7 @@ use wgpu::*;
 
 use crate::core::Texture::Texture;
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
-use crate::handlers::Vertex;
+use crate::handlers::{get_camera, Vertex};
 use crate::helpers::landscapes::get_landscape_pixels;
 use crate::helpers::saved_data::LandscapeTextureKinds;
 
@@ -44,8 +45,9 @@ pub struct TerrainMesh {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
     pub index_count: u32,
-    pub collider: Collider,
-    pub rigid_body: RigidBody,
+    pub collider: Option<Collider>,
+    pub rigid_body: Option<RigidBody>,
+    pub depth: u32,
 }
 
 impl QuadNode {
@@ -69,6 +71,7 @@ impl QuadNode {
                 device,
                 terrain_position,
                 landscape_component_id,
+                depth,
             )),
             rigid_body_handle: None,
             collider_handle: None,
@@ -84,6 +87,7 @@ impl QuadNode {
         impulse_joint_set: &mut ImpulseJointSet,
         multibody_joint_set: &mut MultibodyJointSet,
     ) {
+        // println!("clean up physics!");
         // Remove collider first
         if let Some(handle) = self.collider_handle.take() {
             collider_set.remove(handle, island_manager, rigid_body_set, true);
@@ -120,19 +124,27 @@ impl QuadNode {
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
     ) {
-        if let Some(ref mesh) = self.mesh {
+        // Only add physics for chunks at deeper levels (e.g., more detailed)
+        // let min_physics_depth = 2; // Tune this value
+        // if self.depth >= min_physics_depth {
+        if let Some(ref mut mesh) = self.mesh {
             // Get rigid body
-            let rigid_body_handle = rigid_body_set.insert(mesh.rigid_body.clone()); // TODO: bad clone?
-            self.rigid_body_handle = Some(rigid_body_handle);
+            if let Some(rigid_body) = mesh.rigid_body.take() {
+                let rigid_body_handle = rigid_body_set.insert(rigid_body);
+                self.rigid_body_handle = Some(rigid_body_handle);
 
-            // Create and attach collider if we have one
-            let collider_handle = collider_set.insert_with_parent(
-                mesh.collider.clone(), // bad clone?
-                rigid_body_handle,
-                rigid_body_set,
-            );
-            self.collider_handle = Some(collider_handle);
+                // Create and attach collider if we have one
+                if let Some(collider) = mesh.collider.take() {
+                    let collider_handle = collider_set.insert_with_parent(
+                        collider,
+                        rigid_body_handle,
+                        rigid_body_set,
+                    );
+                    self.collider_handle = Some(collider_handle);
+                }
+            }
         }
+        // }
 
         // Recursively add physics components to children
         if let Some(ref mut children) = self.children {
@@ -170,12 +182,18 @@ impl QuadNode {
                 depth: self.depth + 1,
                 children: None,
                 mesh: Some(Self::create_mesh(
-                    &self.bounds,
+                    &Rect {
+                        x: self.bounds.x,
+                        z: self.bounds.z,
+                        width: half_width,
+                        height: half_height,
+                    },
                     height_data,
                     16,
                     device,
                     terrain_position,
                     landscape_component_id.clone(),
+                    self.depth + 1,
                 )),
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
@@ -194,12 +212,18 @@ impl QuadNode {
                 depth: self.depth + 1,
                 children: None,
                 mesh: Some(Self::create_mesh(
-                    &self.bounds,
+                    &Rect {
+                        x: self.bounds.x + half_width,
+                        z: self.bounds.z,
+                        width: half_width,
+                        height: half_height,
+                    },
                     height_data,
                     16,
                     device,
                     terrain_position,
                     landscape_component_id.clone(),
+                    self.depth + 1,
                 )),
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
@@ -218,12 +242,18 @@ impl QuadNode {
                 depth: self.depth + 1,
                 children: None,
                 mesh: Some(Self::create_mesh(
-                    &self.bounds,
+                    &Rect {
+                        x: self.bounds.x,
+                        z: self.bounds.z + half_height,
+                        width: half_width,
+                        height: half_height,
+                    },
                     height_data,
                     16,
                     device,
                     terrain_position,
                     landscape_component_id.clone(),
+                    self.depth + 1,
                 )),
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
@@ -242,12 +272,18 @@ impl QuadNode {
                 depth: self.depth + 1,
                 children: None,
                 mesh: Some(Self::create_mesh(
-                    &self.bounds,
+                    &Rect {
+                        x: self.bounds.x + half_width,
+                        z: self.bounds.z + half_height,
+                        width: half_width,
+                        height: half_height,
+                    },
                     height_data,
                     16,
                     device,
                     terrain_position,
                     landscape_component_id.clone(),
+                    self.depth + 1,
                 )),
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
@@ -260,18 +296,66 @@ impl QuadNode {
         self.children = Some(children);
     }
 
-    pub fn should_split(&self, camera_pos: [f32; 3], lod_distances: &[f32]) -> bool {
-        // Calculate distance from camera to node center
-        let node_center = [
-            self.bounds.x + self.bounds.width / 2.0,
-            0.0, // Use average height here if needed
-            self.bounds.z + self.bounds.height / 2.0,
+    pub fn should_split(
+        &self,
+        camera_pos: [f32; 3],
+        lod_distances: &[f32],
+        transform_position: [f32; 3],
+    ) -> bool {
+        // Get node corners in world space
+        let corners = [
+            // Near corners
+            [
+                transform_position[0] + self.bounds.x,
+                transform_position[1],
+                transform_position[2] + self.bounds.z,
+            ],
+            [
+                transform_position[0] + self.bounds.x + self.bounds.width,
+                transform_position[1],
+                transform_position[2] + self.bounds.z,
+            ],
+            // Far corners
+            [
+                transform_position[0] + self.bounds.x,
+                transform_position[1],
+                transform_position[2] + self.bounds.z + self.bounds.height,
+            ],
+            [
+                transform_position[0] + self.bounds.x + self.bounds.width,
+                transform_position[1],
+                transform_position[2] + self.bounds.z + self.bounds.height,
+            ],
         ];
 
-        let distance = distance_squared(camera_pos, node_center);
+        // Find closest point to camera
+        let closest_dist = corners
+            .iter()
+            .map(|corner| distance_squared(camera_pos, *corner))
+            .reduce(f32::min)
+            .unwrap_or(f32::MAX);
 
-        // Check if we're within the LOD distance threshold for this level
-        distance < lod_distances[self.depth as usize].powi(2)
+        // Calculate node size (diagonal)
+        let node_size = (self.bounds.width * self.bounds.width
+            + self.bounds.height * self.bounds.height)
+            .sqrt();
+
+        // Calculate view-dependent error metric
+        // Split if we're close to any part of the node relative to its size
+        let error_threshold = node_size * 0.5; // Adjust this factor to control split aggressiveness
+        let should_split =
+            closest_dist < (lod_distances[self.depth as usize] * error_threshold).powi(2);
+
+        // println!(
+        //     "Depth: {}, Node size: {:.2}, Closest dist: {:.2}, Threshold: {:.2}, Split: {}",
+        //     self.depth,
+        //     node_size,
+        //     closest_dist.sqrt(),
+        //     lod_distances[self.depth as usize] * error_threshold,
+        //     should_split
+        // );
+
+        should_split
     }
 
     fn update_lod(
@@ -284,17 +368,17 @@ impl QuadNode {
         terrain_position: [f32; 3],
         landscape_component_id: String,
     ) -> bool {
-        // Returns true if LOD state changed
         if self.depth >= max_depth {
             return false;
         }
 
-        let should_split = self.should_split(camera_pos, lod_distances);
+        let should_split = self.should_split(camera_pos, lod_distances, terrain_position);
         let had_children = self.children.is_some();
         let mut state_changed = false;
 
         if should_split {
-            if self.children.is_none() {
+            // Create children if we don't have them
+            if !had_children {
                 self.split(
                     height_data,
                     max_depth,
@@ -305,18 +389,42 @@ impl QuadNode {
                 state_changed = true;
             }
 
-            // Recursively update children
+            // Find the closest child and only split that one
             if let Some(ref mut children) = self.children {
-                for child in children.iter_mut() {
-                    if child.update_lod(
-                        camera_pos,
-                        height_data,
-                        lod_distances,
-                        max_depth,
-                        device,
-                        terrain_position,
-                        landscape_component_id.clone(),
-                    ) {
+                // Calculate distances to each child's center
+                let mut closest_idx = 0;
+                let mut min_distance = f32::MAX;
+
+                for (idx, child) in children.iter().enumerate() {
+                    let child_center = [
+                        terrain_position[0] + child.bounds.x + child.bounds.width / 2.0,
+                        terrain_position[1],
+                        terrain_position[2] + child.bounds.z + child.bounds.height / 2.0,
+                    ];
+                    let dist = distance_squared(camera_pos, child_center);
+                    if dist < min_distance {
+                        min_distance = dist;
+                        closest_idx = idx;
+                    }
+                }
+
+                // Only update the closest child
+                if children[closest_idx].update_lod(
+                    camera_pos,
+                    height_data,
+                    lod_distances,
+                    max_depth,
+                    device,
+                    terrain_position,
+                    landscape_component_id.clone(),
+                ) {
+                    state_changed = true;
+                }
+
+                // Merge other children if they have subdivisions
+                for (idx, child) in children.iter_mut().enumerate() {
+                    if idx != closest_idx && child.children.is_some() {
+                        child.children = None;
                         state_changed = true;
                     }
                 }
@@ -324,10 +432,6 @@ impl QuadNode {
         } else if had_children {
             self.children = None;
             state_changed = true;
-        }
-
-        if state_changed {
-            self.lod_dirty = true;
         }
 
         state_changed
@@ -390,14 +494,30 @@ impl QuadNode {
         true
     }
 
-    pub fn render<'a>(
+    fn render<'a>(
         &'a self,
         render_pass: &mut RenderPass<'a>,
         camera_bind_group: &'a BindGroup,
         landscape_bind_group: &'a BindGroup,
         texture_bind_group: &'a BindGroup,
     ) {
-        // If this node has children, render them instead
+        // Skip depth 0 (root node)
+        // if self.depth == 0 || self.depth == 1 || self.depth == 2 || self.depth ==  {
+        //     // Only render children if they exist
+        //     if let Some(ref children) = self.children {
+        //         for child in children.iter() {
+        //             child.render(
+        //                 render_pass,
+        //                 camera_bind_group,
+        //                 landscape_bind_group,
+        //                 texture_bind_group,
+        //             );
+        //         }
+        //     }
+        //     return;
+        // }
+
+        // Rest of the render logic for non-root nodes
         if let Some(ref children) = self.children {
             for child in children.iter() {
                 child.render(
@@ -410,7 +530,6 @@ impl QuadNode {
             return;
         }
 
-        // If this is a leaf node with a mesh, render it
         if let Some(ref mesh) = self.mesh {
             render_pass.set_bind_group(0, camera_bind_group, &[]);
             render_pass.set_bind_group(1, landscape_bind_group, &[]);
@@ -425,6 +544,28 @@ impl QuadNode {
 }
 
 impl QuadNode {
+    // Maybe something like this for resolution calculation
+    fn get_resolution_for_depth(depth: u32) -> u32 {
+        // Example scaling:
+        // depth 0 (root) -> 16
+        // depth 1 -> 32
+        // depth 2 -> 64
+        // depth 3 -> 128
+        // depth 4 -> 256
+        match depth {
+            0 => 16,
+            1 => 32,
+            2 => 64,
+            3 => 128,
+            4 => 256,
+            5 => 512,
+            6 => 1024,
+            7 => 2048,
+            8 => 4096,
+            _ => 16,
+        }
+    }
+
     fn create_mesh(
         bounds: &Rect,
         height_data: &[f32],
@@ -432,51 +573,58 @@ impl QuadNode {
         device: &Device,
         terrain_position: [f32; 3],
         landscape_component_id: String,
+        depth: u32,
     ) -> TerrainMesh {
+        let calc_res = Self::get_resolution_for_depth(depth);
         let mut vertices = Vec::with_capacity((resolution * resolution) as usize);
         let mut indices = Vec::with_capacity(((resolution - 1) * (resolution - 1) * 6) as usize);
 
         // Steps between vertices
-        let step_x = bounds.width / (resolution - 1) as f32;
-        let step_z = bounds.height / (resolution - 1) as f32;
+        // let step_x = bounds.width / (resolution - 1) as f32;
+        // let step_z = bounds.height / (resolution - 1) as f32;
 
         // Create a matrix to store heights for Rapier
-        let mut height_matrix = nalgebra::DMatrix::zeros(resolution as usize, resolution as usize);
+        let mut height_matrix = nalgebra::DMatrix::zeros(calc_res as usize, calc_res as usize);
+        let width_calc = (height_data.len() as f32).sqrt() as f32;
 
-        // Generate vertices in a regular grid
-        for z in 0..resolution {
-            for x in 0..resolution {
-                let pos_x = bounds.x + x as f32 * step_x;
-                let pos_z = bounds.z + z as f32 * step_z;
+        println!("width calc {:?} {:?}", width_calc, calc_res);
 
-                // Get normalized coordinates for height sampling
-                let norm_x = x as f32 / (resolution - 1) as f32;
-                let norm_z = z as f32 / (resolution - 1) as f32;
+        let camera = get_camera();
+        println!("create mesh, cam pos: {:?}", camera.position);
 
-                // Sample height and store in matrix
-                let height = sample_height_normalized(norm_x, norm_z, height_data);
+        // Generate vertices
+        for z in 0..calc_res {
+            for x in 0..calc_res {
+                // Calculate world position
+                let world_x = bounds.x + (x as f32 * ((bounds.width) / calc_res as f32));
+                let world_z = bounds.z + (z as f32 * ((bounds.height) / calc_res as f32));
+
+                // Get height at this world position
+                let height = sample_height_world(world_x, world_z, height_data);
                 height_matrix[(z as usize, x as usize)] = height;
 
-                // Calculate texture coordinates
-                let tex_u = norm_x;
-                let tex_v = norm_z;
+                // Calculate texture coordinates based on world position
+                let tex_x = (world_x + width_calc / 2.0) / width_calc;
+                let tex_z = (world_z + width_calc / 2.0) / width_calc;
 
-                // Store vertex with position and texture coordinates
                 vertices.push(Vertex {
-                    position: [pos_x, height, pos_z],
-                    normal: [0.0, 1.0, 0.0], // might want to calculate proper normals
-                    tex_coords: [tex_u, tex_v],
+                    position: [world_x, height, world_z],
+                    normal: [0.0, 1.0, 0.0],
+                    tex_coords: [tex_x, tex_z],
                     color: [1.0, 0.0, 0.0],
                 });
             }
         }
 
+        println!("height: {:?}", vertices[1].position[1]);
+        println!("vertices length {:?}", vertices.len());
+
         // Generate indices for triangle strips
-        for z in 0..resolution - 1 {
-            for x in 0..resolution - 1 {
-                let top_left = z * resolution + x;
+        for z in 0..calc_res - 1 {
+            for x in 0..calc_res - 1 {
+                let top_left = z * calc_res + x;
                 let top_right = top_left + 1;
-                let bottom_left = (z + 1) * resolution + x;
+                let bottom_left = (z + 1) * calc_res + x;
                 let bottom_right = bottom_left + 1;
 
                 // First triangle (top-left, bottom-left, top-right)
@@ -488,12 +636,41 @@ impl QuadNode {
                 indices.push(top_right);
                 indices.push(bottom_left);
                 indices.push(bottom_right);
+
+                // // Additional connections - but only within this quad
+                // if x < calc_res - 2 {
+                //     // Connect to next column, but only if we're not at the quad edge
+                //     indices.extend_from_slice(&[
+                //         top_right as u32,
+                //         bottom_right as u32,
+                //         top_right + 1 as u32,
+                //     ]);
+                //     indices.extend_from_slice(&[
+                //         bottom_right as u32,
+                //         bottom_right + 1 as u32,
+                //         top_right + 1 as u32,
+                //     ]);
+                // }
+
+                // if z < calc_res - 2 {
+                //     // Connect to next row, but only if we're not at the quad edge
+                //     indices.extend_from_slice(&[
+                //         bottom_left as u32,
+                //         bottom_left + calc_res as u32,
+                //         bottom_right as u32,
+                //     ]);
+                //     indices.extend_from_slice(&[
+                //         bottom_right as u32,
+                //         bottom_left + calc_res as u32,
+                //         bottom_right + calc_res as u32,
+                //     ]);
+                // }
             }
         }
 
         // Calculate normals if needed
         if vertices.len() > 0 {
-            calculate_normals(&mut vertices, &indices);
+            // calculate_normals(&mut vertices, &indices);
         }
 
         // Create vertex buffer
@@ -512,22 +689,27 @@ impl QuadNode {
 
         // Create Rapier heightfield
         let heights = height_matrix;
-        // let scaling = vector![
-        //     bounds.width / (resolution - 1) as f32,
-        //     1.0, // Height scale
-        //     bounds.height / (resolution - 1) as f32
-        // ];
+
         let scaling = vector![
             bounds.width as f32,
             1.0, // Height scale
             bounds.height as f32
         ];
-        let translation = vector![bounds.x, 0.0, bounds.z];
+
+        // let translation = vector![bounds.x, 0.0, bounds.z];
+        let translation = vector![0.0, -220.0, 0.0];
+
+        let isometry = Isometry3::translation(
+            terrain_position[0],
+            terrain_position[1],
+            terrain_position[2],
+        );
 
         let terrain_collider = ColliderBuilder::heightfield(heights.clone(), scaling)
             .friction(0.9)
             .restitution(0.1)
             // .position(isometry)
+            // .translation(translation)
             .user_data(
                 Uuid::from_str(&landscape_component_id)
                     .expect("Couldn't extract uuid")
@@ -538,14 +720,8 @@ impl QuadNode {
         // Create the ground as a fixed rigid body
 
         println!(
-            "insert landscape rigidbody position {:?} {:?}",
-            terrain_position, translation
-        );
-
-        let isometry = Isometry3::translation(
-            terrain_position[0],
-            terrain_position[1],
-            terrain_position[2],
+            "insert landscape rigidbody position {:?} {:?} {:?}",
+            depth, bounds, terrain_position
         );
 
         let ground_rigid_body = RigidBodyBuilder::fixed()
@@ -563,8 +739,9 @@ impl QuadNode {
             vertex_buffer,
             index_buffer,
             index_count: indices.len() as u32,
-            collider: terrain_collider,
-            rigid_body: ground_rigid_body,
+            collider: Some(terrain_collider),
+            rigid_body: Some(ground_rigid_body),
+            depth,
         }
     }
 }
@@ -620,13 +797,33 @@ fn calculate_normals(vertices: &mut [Vertex], indices: &[u32]) {
     }
 }
 
-// Helper function to sample height with normalized coordinates
+// // Helper function to sample height with normalized coordinates
 fn sample_height_normalized(norm_x: f32, norm_z: f32, height_data: &[f32]) -> f32 {
     let width = (height_data.len() as f32).sqrt() as usize;
     let x = (norm_x * (width - 1) as f32).round() as usize;
     let z = (norm_z * (width - 1) as f32).round() as usize;
     let index = z * width + x;
     height_data.get(index).copied().unwrap_or(0.0)
+}
+
+fn sample_height_world(world_x: f32, world_z: f32, height_data: &[f32]) -> f32 {
+    let width = (height_data.len() as f32).sqrt() as f32;
+
+    // println!("normal width {:?}", width);
+
+    // Convert from world space to 0-1 range using actual terrain width
+    let norm_x = (world_x + width / 2.0) / width;
+    let norm_z = (world_z + width / 2.0) / width;
+
+    // Use these normalized coordinates directly to get the index
+    let index = ((norm_z * width as f32) as f32 * width) + (norm_x * width as f32) as f32;
+
+    // println!(
+    //     "World pos ({:.1}, {:.1}) -> norm ({:.3}, {:.3}) -> index {}",
+    //     world_x, world_z, norm_x, norm_z, index
+    // );
+
+    height_data.get(index as usize).copied().unwrap_or(0.0)
 }
 
 // Helper function to sample height from the height data
@@ -656,7 +853,7 @@ pub struct TerrainManager {
 
 impl TerrainManager {
     // Constants for LOD configuration
-    const MAX_LOD_LEVELS: usize = 8;
+    const MAX_LOD_LEVELS: usize = 4;
     const BASE_LOD_DISTANCE: f32 = 1000.0; // Distance for first LOD transition
     const LOD_DISTANCE_MULTIPLIER: f32 = 0.5; // Each level shows more detail at half the distance
 
@@ -673,7 +870,7 @@ impl TerrainManager {
         // let square_size = 1024.0 * 100.0;
         // let square_height = 1858.0 * 10.0;
         let square_size = 1024.0 * 4.0;
-        let square_height = 150.0;
+        let square_height = 150.0 * 4.0;
         let data = get_landscape_pixels(projectId, landscapeAssetId, landscapeFilename);
 
         println!("loaded heights... creating root quad...");
@@ -687,8 +884,8 @@ impl TerrainManager {
                 // height: 1000.0,
                 width: square_size,
                 height: square_size,
-                x: -(square_size / 2.0),
-                z: -(square_size / 2.0),
+                x: -(square_size / 2.0) + terrain_position[0],
+                z: -(square_size / 2.0) + terrain_position[2],
             },
             &data.raw_heights,
             32, // Base resolution
@@ -736,7 +933,7 @@ impl TerrainManager {
             texture_array_view: None,
             texture_bind_group: None,
             lod_update_timer: 0.0,
-            lod_update_interval: 0.5, // Configure as needed
+            lod_update_interval: 5.0, // Configure as needed
         }
     }
 
@@ -747,6 +944,8 @@ impl TerrainManager {
         queue: &wgpu::Queue,
     ) {
         if let Some(ref texture_bind_group) = &self.texture_bind_group {
+            let render_time = Instant::now();
+
             // Update any per-terrain transform uniforms if needed
             self.transform.update_uniform_buffer(&queue);
 
@@ -757,6 +956,9 @@ impl TerrainManager {
                 &self.bind_group,
                 texture_bind_group,
             );
+
+            let render_duration = render_time.elapsed();
+            // println!("  render_duration: {:?}", render_duration);
         }
     }
 
@@ -775,7 +977,11 @@ impl TerrainManager {
 
         // Only update LOD and physics at specified intervals
         if self.lod_update_timer >= self.lod_update_interval {
+            let update_time = Instant::now();
+
             let lod_distances = self.calculate_lod_distances();
+
+            println!("update lods? {:?} {:?}", lod_distances, camera_pos);
 
             // Update LOD structure
             let lod_changed = self.root.update_lod(
@@ -788,19 +994,33 @@ impl TerrainManager {
                 self.id.clone(),
             );
 
+            let update_duration = update_time.elapsed();
+            println!("  update_duration: {:?}", update_duration);
+            let physics_time = Instant::now();
+
             // Only update physics if LOD changed
-            if lod_changed {
-                println!("update_physics_if_needed");
-                self.root.update_physics_if_needed(
-                    rigid_body_set,
-                    collider_set,
-                    island_manager,
-                    impulse_joint_set,
-                    multibody_joint_set,
-                );
-            }
+            // if lod_changed {
+            println!("update_physics_if_needed");
+            self.root.update_physics_if_needed(
+                rigid_body_set,
+                collider_set,
+                island_manager,
+                impulse_joint_set,
+                multibody_joint_set,
+            );
+            // }
 
             self.lod_update_timer = 0.0;
+
+            let physics_duration = physics_time.elapsed();
+            println!("  physics_duration: {:?}", physics_duration);
+
+            println!(
+                "get_active_physics_count {:?} {:?} {:?}",
+                self.get_active_physics_count(),
+                rigid_body_set.len(),
+                collider_set.len()
+            );
         }
     }
 

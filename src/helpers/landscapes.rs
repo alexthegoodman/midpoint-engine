@@ -141,7 +141,7 @@ pub fn get_landscape_pixels(
     // let square_size = 1024.0 * 100.0;
     // let square_height = 1858.0 * 10.0;
     let square_size = 1024.0 * 4.0;
-    let square_height = 150.0;
+    let square_height = 150.0 * 4.0;
     let (width, height, pixel_data, rapier_heights, raw_heights) = read_tiff_heightmap(
         landscape_path
             .to_str()
