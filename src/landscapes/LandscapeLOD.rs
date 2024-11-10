@@ -53,7 +53,7 @@ pub struct TerrainMesh {
     pub depth: u32,
 }
 
-const PHYSICS_DISTANCE: f32 = 150.0;
+const PHYSICS_DISTANCE: f32 = 1000.0;
 
 impl QuadNode {
     pub fn new(
@@ -325,7 +325,9 @@ impl QuadNode {
         lod_distances: &[f32],
         transform_position: [f32; 3],
     ) -> bool {
-        let closest_dist = get_camera_distance_from_bounds(self.bounds.clone(), transform_position);
+        // let closest_dist = get_camera_distance_from_bounds(self.bounds.clone(), transform_position);
+        let closest_dist =
+            get_camera_distance_from_bound_center_rel(self.bounds.clone(), transform_position);
 
         // Calculate node size (diagonal)
         let node_size = (self.bounds.width * self.bounds.width
@@ -388,6 +390,8 @@ impl QuadNode {
                 // Calculate distances to each child's center
                 let mut closest_idx = 0;
                 let mut min_distance = f32::MAX;
+
+                // TODO: split all children if should_split is true?
 
                 for (idx, child) in children.iter().enumerate() {
                     let child_center = [
@@ -462,7 +466,8 @@ impl QuadNode {
         }
 
         let closest_dist =
-            get_camera_distance_from_bounds_rel(self.bounds.clone(), transform_position).sqrt();
+            get_camera_distance_from_bound_center_rel(self.bounds.clone(), transform_position)
+                .sqrt();
 
         // TODO: set to reasonable amount
         if (closest_dist < PHYSICS_DISTANCE) {
@@ -745,7 +750,7 @@ impl QuadNode {
         //     .build();
 
         let closest_dist =
-            get_camera_distance_from_bounds_rel(bounds.clone(), terrain_position).sqrt();
+            get_camera_distance_from_bound_center_rel(bounds.clone(), terrain_position).sqrt();
 
         println!("closest_dist {:?}", closest_dist);
 
@@ -1379,6 +1384,47 @@ pub fn get_camera_distance_from_bounds(bounds: Rect, transform_position: [f32; 3
         .unwrap_or(f32::MAX);
 
     closest_dist
+}
+
+pub fn get_camera_distance_from_bound_center(bounds: Rect, transform_position: [f32; 3]) -> f32 {
+    let camera = get_camera();
+
+    // Get node corners in world space
+    let center = [
+        transform_position[0] + bounds.x + (bounds.width / 2.0),
+        transform_position[1],
+        transform_position[2] + bounds.z + (bounds.height / 2.0),
+    ];
+
+    // Find closest point to camera
+    let dist = distance_squared(
+        [camera.position.x, camera.position.y, camera.position.z],
+        center,
+    );
+
+    dist
+}
+
+pub fn get_camera_distance_from_bound_center_rel(
+    bounds: Rect,
+    transform_position: [f32; 3],
+) -> f32 {
+    let camera = get_camera();
+
+    // Get node corners in world space
+    let center = [
+        transform_position[0] + bounds.x + (bounds.width / 2.0),
+        camera.position[1],
+        transform_position[2] + bounds.z + (bounds.height / 2.0),
+    ];
+
+    // Find closest point to camera
+    let dist = distance_squared(
+        [camera.position.x, camera.position.y, camera.position.z],
+        center,
+    );
+
+    dist
 }
 
 pub fn get_camera_distance_from_bounds_rel(bounds: Rect, transform_position: [f32; 3]) -> f32 {
