@@ -1,5 +1,5 @@
 use image::DynamicImage;
-use nalgebra::{Isometry3, Matrix4, Vector3};
+use nalgebra::{Isometry3, Matrix4, Point3, Vector3};
 use rapier3d::prelude::*;
 use rapier3d::prelude::{Collider, ColliderBuilder, RigidBody, RigidBodyBuilder};
 use std::num::NonZeroU32;
@@ -23,6 +23,7 @@ pub struct QuadNode {
     pub depth: u32,
     pub children: Option<Box<[QuadNode; 4]>>,
     pub mesh: Option<TerrainMesh>,
+    pub debug_mesh: Option<TerrainMesh>,
     // for conveneience?
     // pub terrain_position: [f32; 3],
     // pub landscape_component_id: String,
@@ -73,6 +74,7 @@ impl QuadNode {
                 landscape_component_id,
                 depth,
             )),
+            debug_mesh: None,
             rigid_body_handle: None,
             collider_handle: None,
             lod_dirty: true, // Start as dirty to ensure initial physics setup
@@ -123,6 +125,7 @@ impl QuadNode {
         &mut self,
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
+        device: &wgpu::Device,
     ) {
         // Only add physics for chunks at deeper levels (e.g., more detailed)
         // let min_physics_depth = 2; // Tune this value
@@ -135,6 +138,10 @@ impl QuadNode {
 
                 // Create and attach collider if we have one
                 if let Some(collider) = mesh.collider.take() {
+                    // if let Some(debug_mesh) = create_debug_collision_mesh(&collider, device) {
+                    //     self.debug_mesh = Some(debug_mesh);
+                    // }
+
                     let collider_handle = collider_set.insert_with_parent(
                         collider,
                         rigid_body_handle,
@@ -149,7 +156,7 @@ impl QuadNode {
         // Recursively add physics components to children
         if let Some(ref mut children) = self.children {
             for child in children.iter_mut() {
-                child.add_physics_components(rigid_body_set, collider_set);
+                child.add_physics_components(rigid_body_set, collider_set, device);
             }
         }
     }
@@ -195,6 +202,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                 )),
+                debug_mesh: None,
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
                 rigid_body_handle: None,
@@ -225,6 +233,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                 )),
+                debug_mesh: None,
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
                 rigid_body_handle: None,
@@ -255,6 +264,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                 )),
+                debug_mesh: None,
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
                 rigid_body_handle: None,
@@ -285,6 +295,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                 )),
+                debug_mesh: None,
                 // terrain_position: self.terrain_position,
                 // landscape_component_id: self.landscape_component_id,
                 rigid_body_handle: None,
@@ -444,6 +455,7 @@ impl QuadNode {
         island_manager: &mut IslandManager,
         impulse_joint_set: &mut ImpulseJointSet,
         multibody_joint_set: &mut MultibodyJointSet,
+        device: &wgpu::Device,
     ) -> bool {
         // Returns true if any physics were updated
         if !self.lod_dirty {
@@ -456,6 +468,7 @@ impl QuadNode {
                         island_manager,
                         impulse_joint_set,
                         multibody_joint_set,
+                        device,
                     )
                 });
             }
@@ -474,7 +487,7 @@ impl QuadNode {
         // Add new physics components if needed
         if self.children.is_none() {
             // Only leaf nodes get physics components
-            self.add_physics_components(rigid_body_set, collider_set);
+            self.add_physics_components(rigid_body_set, collider_set, device);
         }
 
         // Recursively update children's physics
@@ -486,6 +499,7 @@ impl QuadNode {
                     island_manager,
                     impulse_joint_set,
                     multibody_joint_set,
+                    device,
                 );
             }
         }
@@ -540,6 +554,18 @@ impl QuadNode {
 
             render_pass.draw_indexed(0..mesh.index_count, 0, 0..1);
         }
+
+        if let Some(ref debug_mesh) = self.debug_mesh {
+            render_pass.set_bind_group(0, camera_bind_group, &[]);
+            render_pass.set_bind_group(1, landscape_bind_group, &[]);
+            render_pass.set_bind_group(2, texture_bind_group, &[]);
+
+            render_pass.set_vertex_buffer(0, debug_mesh.vertex_buffer.slice(..));
+            render_pass
+                .set_index_buffer(debug_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+            render_pass.draw_indexed(0..debug_mesh.index_count, 0, 0..1);
+        }
     }
 }
 
@@ -592,6 +618,8 @@ impl QuadNode {
         let camera = get_camera();
         println!("create mesh, cam pos: {:?}", camera.position);
 
+        let mut rapier_vertices = Vec::new();
+
         // Generate vertices
         for z in 0..calc_res {
             for x in 0..calc_res {
@@ -601,7 +629,7 @@ impl QuadNode {
 
                 // Get height at this world position
                 let height = sample_height_world(world_x, world_z, height_data);
-                height_matrix[(z as usize, x as usize)] = height;
+                height_matrix[(z as usize, x as usize)] = height + (terrain_position[1] / 2.0); // add if negative position?
 
                 // Calculate texture coordinates based on world position
                 let tex_x = (world_x + width_calc / 2.0) / width_calc;
@@ -613,6 +641,8 @@ impl QuadNode {
                     tex_coords: [tex_x, tex_z],
                     color: [1.0, 0.0, 0.0],
                 });
+
+                rapier_vertices.push(Point3::new(world_x, height, world_z));
             }
         }
 
@@ -705,17 +735,31 @@ impl QuadNode {
             terrain_position[2],
         );
 
-        let terrain_collider = ColliderBuilder::heightfield(heights.clone(), scaling)
-            .friction(0.9)
-            .restitution(0.1)
-            // .position(isometry)
-            // .translation(translation)
-            .user_data(
-                Uuid::from_str(&landscape_component_id)
-                    .expect("Couldn't extract uuid")
-                    .as_u128(),
-            )
-            .build();
+        // let terrain_collider = ColliderBuilder::heightfield(heights.clone(), scaling)
+        //     .friction(0.9)
+        //     .restitution(0.1)
+        //     // .position(isometry)
+        //     // .translation(translation)
+        //     .user_data(
+        //         Uuid::from_str(&landscape_component_id)
+        //             .expect("Couldn't extract uuid")
+        //             .as_u128(),
+        //     )
+        //     .build();
+
+        let terrain_collider = ColliderBuilder::trimesh(
+            rapier_vertices,
+            indices
+                .chunks(3)
+                .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+                .collect::<Vec<[u32; 3]>>(),
+        )
+        .user_data(
+            Uuid::from_str(&landscape_component_id)
+                .expect("Couldn't extract uuid")
+                .as_u128(),
+        )
+        .build();
 
         // Create the ground as a fixed rigid body
 
@@ -1007,6 +1051,7 @@ impl TerrainManager {
                 island_manager,
                 impulse_joint_set,
                 multibody_joint_set,
+                device,
             );
             // }
 
@@ -1180,6 +1225,106 @@ pub fn distance_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     let dy = b[1] - a[1];
     let dz = b[2] - a[2];
     dx * dx + dy * dy + dz * dz
+}
+
+fn create_debug_collision_mesh(collider: &Collider, device: &Device) -> Option<TerrainMesh> {
+    if let Some(shape) = collider.shape().as_heightfield() {
+        // Debug print the heightfield properties
+        println!("Heightfield properties:");
+        println!("  Scale: {:?}", shape.scale());
+        println!("  Dimensions: {} x {}", shape.nrows(), shape.ncols());
+
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+        let mut vertex_index = 0;
+
+        // Print some height values from the heightfield directly
+        println!("Raw height samples:");
+        for i in 0..3 {
+            println!("  Height at {}: {}", i, shape.heights()[i]);
+        }
+
+        // Get triangles and build vertex/index buffers
+        let triangles = shape.triangles();
+
+        // Track min/max Y values to verify variation
+        let mut min_y = f32::MAX;
+        let mut max_y = f32::MIN;
+
+        for triangle in triangles {
+            // Check Y variation in triangles
+            min_y = min_y.min(triangle.a.y).min(triangle.b.y).min(triangle.c.y);
+            max_y = max_y.max(triangle.a.y).max(triangle.b.y).max(triangle.c.y);
+
+            if vertex_index < 3 {
+                println!("Triangle {}:", vertex_index / 3);
+                println!("  A: {:?}", triangle.a);
+                println!("  B: {:?}", triangle.b);
+                println!("  C: {:?}", triangle.c);
+            }
+
+            // Add vertices
+            vertices.push(Vertex {
+                position: [triangle.a.x, triangle.a.y, triangle.a.z],
+                normal: [0.0, 1.0, 0.0], // We could calculate proper normals if needed
+                tex_coords: [0.0, 0.0],  // Not needed for debug visualization
+                color: [1.0, 0.0, 0.0],  // Red for debug visualization
+            });
+            vertices.push(Vertex {
+                position: [triangle.b.x, triangle.b.y, triangle.b.z],
+                normal: [0.0, 1.0, 0.0],
+                tex_coords: [0.0, 0.0],
+                color: [1.0, 0.0, 0.0],
+            });
+            vertices.push(Vertex {
+                position: [triangle.c.x, triangle.c.y, triangle.c.z],
+                normal: [0.0, 1.0, 0.0],
+                tex_coords: [0.0, 0.0],
+                color: [1.0, 0.0, 0.0],
+            });
+
+            // Add indices for this triangle
+            indices.push(vertex_index);
+            indices.push(vertex_index + 1);
+            indices.push(vertex_index + 2);
+
+            vertex_index += 3;
+        }
+
+        println!("Height range in debug mesh:");
+        println!("  Min Y: {}", min_y);
+        println!("  Max Y: {}", max_y);
+        println!("  Variation: {}", max_y - min_y);
+
+        println!("Debug mesh stats:");
+        println!("  Vertices: {}", vertices.len());
+        println!("  Indices: {}", indices.len());
+
+        // Create vertex buffer
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Debug Collision Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        // Create index buffer
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Debug Collision Index Buffer"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        Some(TerrainMesh {
+            vertex_buffer,
+            index_buffer,
+            index_count: indices.len() as u32,
+            collider: None, // No need for physics on debug mesh
+            rigid_body: Some(RigidBodyBuilder::fixed().build()), // Dummy rigid body
+            depth: 1,
+        })
+    } else {
+        None
+    }
 }
 
 // Add this to handle hysteresis for LOD transitions
