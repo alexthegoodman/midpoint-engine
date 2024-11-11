@@ -68,6 +68,13 @@ impl TerrainManager {
         // Create root node
         let root = QuadNode::new(
             Rect {
+                // hopefully can use self as parent in calculations
+                width: square_size,
+                height: square_size,
+                x: -(square_size / 2.0) + terrain_position[0],
+                z: -(square_size / 2.0) + terrain_position[2],
+            },
+            Rect {
                 // x: -500.0, // Adjust these values based on world scale
                 // z: -500.0,
                 // width: 1000.0,
