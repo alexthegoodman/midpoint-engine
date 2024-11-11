@@ -1138,11 +1138,6 @@ pub fn restore_renderer_from_saved(
 
             println!("Model Added!");
 
-            // restore generic properties like position
-            // let mut renderer_state_guard = renderer_state.lock().unwrap();
-
-            // drop(renderer_state_guard);
-
             let mut renderer_state_guard = renderer_state.lock().unwrap();
 
             renderer_state_guard.add_collider(
@@ -1151,28 +1146,6 @@ pub fn restore_renderer_from_saved(
             );
 
             drop(renderer_state_guard);
-
-            // let mut renderer_state_guard = renderer_state.lock().unwrap();
-
-            // let mut renderer_model = renderer_state_guard
-            //     .models
-            //     .iter_mut()
-            //     .find(|m| m.id == component.id.clone())
-            //     .expect("Couldn't get Renderer Model");
-
-            // renderer_model.meshes.iter_mut().for_each(move |mesh| {
-            //     mesh.transform.update_position(position);
-            //     let isometry = nalgebra::Isometry3::new(
-            //         vector![position[0], position[1], position[2]],
-            //         vector![rotation[0], rotation[1], rotation[2]],
-            //     );
-            //     // mesh.rapier_collider.set_position(isometry);
-            //     mesh.rapier_rigidbody.set_position(isometry, true);
-            // });
-
-            // drop(renderer_state_guard);
-
-            // let mut renderer_state = renderer_state.lock().unwrap();
 
             println!("Finished restoring!");
         }

@@ -18,11 +18,12 @@ use crate::core::Transform::{matrix4_to_raw_array, Transform};
 use crate::handlers::{get_camera, Vertex};
 use crate::helpers::landscapes::get_landscape_pixels;
 use crate::helpers::saved_data::LandscapeTextureKinds;
-use crate::landscapes::LandscapeLOD::sample_height_world;
+use crate::landscapes::LandscapeLOD::{sample_height_world, MAX_LOD_LEVELS};
+use crate::landscapes::TerrainManager::calculate_lod_distances;
 
 use super::LandscapeLOD::{
-    distance_squared, get_camera_distance_from_bound_center_rel, ColliderMessage, Rect,
-    PHYSICS_DISTANCE,
+    create_debug_collision_mesh, distance_squared, get_camera_distance_from_bound_center_rel,
+    ColliderMessage, Rect, PHYSICS_DISTANCE,
 };
 
 #[derive(Debug)]
@@ -69,6 +70,7 @@ impl QuadNode {
         terrain_position: [f32; 3],
         landscape_component_id: String,
         collider_sender: Sender<ColliderMessage>,
+        corner: &str,
     ) -> Self {
         let depth = 0;
         Self {
@@ -85,6 +87,7 @@ impl QuadNode {
                 landscape_component_id,
                 depth,
                 collider_sender,
+                corner,
             )),
             debug_mesh: None,
             rigid_body_handle: None,
@@ -217,6 +220,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                     collider_sender.clone(),
+                    "top_left",
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -250,6 +254,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                     collider_sender.clone(),
+                    "top_right",
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -283,6 +288,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                     collider_sender.clone(),
+                    "bottom_left",
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -316,6 +322,7 @@ impl QuadNode {
                     landscape_component_id.clone(),
                     self.depth + 1,
                     collider_sender.clone(),
+                    "bottom_right",
                 )),
                 debug_mesh: None,
                 // terrain_position: self.terrain_position,
@@ -329,44 +336,11 @@ impl QuadNode {
         self.children = Some(children);
     }
 
-    pub fn should_split(
-        &self,
-        camera_pos: [f32; 3],
-        lod_distances: &[f32],
-        transform_position: [f32; 3],
-    ) -> bool {
-        // let closest_dist = get_camera_distance_from_bounds(self.bounds.clone(), transform_position);
-        let closest_dist =
-            get_camera_distance_from_bound_center_rel(self.bounds.clone(), transform_position);
-
-        // Calculate node size (diagonal)
-        let node_size = (self.bounds.width * self.bounds.width
-            + self.bounds.height * self.bounds.height)
-            .sqrt();
-
-        // Calculate view-dependent error metric
-        // Split if we're close to any part of the node relative to its size
-        let error_threshold = node_size * 0.5; // Adjust this factor to control split aggressiveness
-        let should_split =
-            closest_dist < (lod_distances[self.depth as usize] * error_threshold).powi(2);
-
-        // println!(
-        //     "Depth: {}, Node size: {:.2}, Closest dist: {:.2}, Threshold: {:.2}, Split: {}",
-        //     self.depth,
-        //     node_size,
-        //     closest_dist.sqrt(),
-        //     lod_distances[self.depth as usize] * error_threshold,
-        //     should_split
-        // );
-
-        should_split
-    }
-
     pub fn update_lod(
         &mut self,
         camera_pos: [f32; 3],
         height_data: &[f32],
-        lod_distances: &[f32],
+        lod_distances: &Vec<f32>,
         max_depth: u32,
         device: &Device,
         terrain_position: [f32; 3],
@@ -377,7 +351,13 @@ impl QuadNode {
             return false;
         }
 
-        let should_split = self.should_split(camera_pos, lod_distances, terrain_position);
+        let should_split = should_split(
+            camera_pos,
+            lod_distances,
+            terrain_position,
+            self.bounds.clone(),
+            self.depth,
+        );
         let had_children = self.children.is_some();
         let mut state_changed = false;
 
@@ -456,6 +436,8 @@ impl QuadNode {
         device: &wgpu::Device,
         transform_position: [f32; 3],
     ) -> bool {
+        let if_needed_time = Instant::now();
+
         // Returns true if any physics were updated
         if !self.lod_dirty {
             // Recursively check children
@@ -480,24 +462,25 @@ impl QuadNode {
                 .sqrt();
 
         // TODO: set to reasonable amount
-        if (closest_dist < PHYSICS_DISTANCE) {
-            println!("closest_dist on physics {:?}", closest_dist);
-            // Clean up existing physics components for this node
-            self.cleanup_physics(
-                rigid_body_set,
-                collider_set,
-                island_manager,
-                impulse_joint_set,
-                multibody_joint_set,
-            );
+        // clean up on mini?
+        // if (closest_dist < PHYSICS_DISTANCE) {
+        //     println!("closest_dist on physics {:?}", closest_dist);
+        //     // Clean up existing physics components for this node
+        //     self.cleanup_physics(
+        //         rigid_body_set,
+        //         collider_set,
+        //         island_manager,
+        //         impulse_joint_set,
+        //         multibody_joint_set,
+        //     );
 
-            // Add new physics components if needed
-            if self.children.is_none() {
-                // Only leaf nodes get physics components
-                // this merely adds them to sets, does not create them
-                self.add_physics_components(rigid_body_set, collider_set, device);
-            }
-        }
+        //     // Add new physics components if needed
+        //     if self.children.is_none() {
+        //         // Only leaf nodes get physics components
+        //         // this merely adds them to sets, does not create them
+        //         self.add_physics_components(rigid_body_set, collider_set, device);
+        //     }
+        // }
 
         // Recursively update children's physics
         if let Some(ref mut children) = self.children {
@@ -513,6 +496,9 @@ impl QuadNode {
                 );
             }
         }
+
+        let if_needed_duration = if_needed_time.elapsed();
+        println!("  if_needed_duration: {:?}", if_needed_duration);
 
         self.lod_dirty = false;
         true
@@ -600,6 +586,19 @@ impl QuadNode {
             8 => 4096,
             _ => 16,
         }
+        // very low quality
+        // match depth {
+        //     0 => 4,
+        //     1 => 8,
+        //     2 => 16,
+        //     3 => 32,
+        //     4 => 64,
+        //     5 => 128,
+        //     6 => 256,
+        //     7 => 512,
+        //     8 => 1024,
+        //     _ => 16,
+        // }
     }
 
     pub fn create_mesh(
@@ -612,14 +611,18 @@ impl QuadNode {
         landscape_component_id: String,
         depth: u32,
         collider_sender: Sender<ColliderMessage>,
+        corner: &str,
     ) -> TerrainMesh {
+        let mesh_time = Instant::now();
+
         let mesh_id = Uuid::new_v4().to_string();
+
+        println!("chunk_id {:?}", mesh_id);
+
         let calc_res = Self::get_resolution_for_depth(depth);
-        // let mut vertices = Vec::with_capacity((resolution * resolution) as usize);
-        // let mut indices = Vec::with_capacity(((resolution - 1) * (resolution - 1) * 6) as usize);
 
         // Create a matrix to store heights for Rapier
-        // let mut height_matrix = nalgebra::DMatrix::zeros(calc_res as usize, calc_res as usize);
+        let mut height_matrix = nalgebra::DMatrix::zeros(calc_res as usize, calc_res as usize);
         let terrain_width = (height_data.len() as f32).sqrt() as f32;
         let terrain_half_width = terrain_width / 2.0;
 
@@ -633,32 +636,6 @@ impl QuadNode {
 
         let mut rapier_vertices = Vec::new();
 
-        // // Generate vertices
-        // for z in 0..calc_res {
-        //     for x in 0..calc_res {
-        //         // Calculate world position
-        //         let world_x = bounds.x + (x as f32 * ((bounds.width) / calc_res as f32));
-        //         let world_z = bounds.z + (z as f32 * ((bounds.height) / calc_res as f32));
-
-        //         // Get height at this world position
-        //         let height = sample_height_world(world_x, world_z, height_data);
-        //         height_matrix[(z as usize, x as usize)] = height + (terrain_position[1] / 2.0); // add if negative position?
-
-        //         // Calculate texture coordinates based on world position
-        //         let tex_x = (world_x + terrain_width / 2.0) / terrain_width;
-        //         let tex_z = (world_z + terrain_width / 2.0) / terrain_width;
-
-        //         vertices.push(Vertex {
-        //             position: [world_x, height, world_z],
-        //             normal: [0.0, 1.0, 0.0],
-        //             tex_coords: [tex_x, tex_z],
-        //             color: [1.0, 0.0, 0.0],
-        //         });
-
-        //         rapier_vertices.push(Point3::new(world_x, height, world_z));
-        //     }
-        // }
-
         // Generate vertices with edge tracking
         let mut edge_vertex_info: Vec<VertexInfo> = Vec::new();
         let mut interior_vertex_info: Vec<VertexInfo> = Vec::new();
@@ -669,7 +646,7 @@ impl QuadNode {
         println!("sample_distance {:?}", sample_distance);
         let mut potential_overlaps = Vec::new();
 
-        // Sample points just outside our bounds
+        // Sample points just outside our bounds to heal LOD cracks
         // Left and right of our quad
         for i in 0..edge_resolution {
             let normalized_z = i as f32 / edge_resolution as f32;
@@ -759,13 +736,6 @@ impl QuadNode {
         for i in 0..edge_resolution {
             let normalized_z = i as f32 / (edge_resolution) as f32;
 
-            // let normalized_i = i as f32 / (edge_resolution - 1) as f32;
-            // let world_x = parent_bounds.x;
-            // let world_z = parent_bounds.z + (normalized_i * parent_bounds.width);
-
-            // let height = sample_height_world(world_x, world_z, height_data);
-            // let world_pos = [world_x, height, world_z];
-
             let height = sample_height_world(
                 bounds.x,
                 bounds.z + (normalized_z * bounds.height),
@@ -798,13 +768,6 @@ impl QuadNode {
         // Right edge
         for i in 0..edge_resolution {
             let normalized_z = i as f32 / (edge_resolution) as f32;
-
-            // let normalized_i = i as f32 / (edge_resolution - 1) as f32;
-            // let world_x = parent_bounds.x + parent_bounds.width; // This will be same x used by adjacent quad
-            // let world_z = parent_bounds.z + (normalized_i * parent_bounds.width);
-
-            // let height = sample_height_world(world_x, world_z, height_data);
-            // let world_pos = [world_x, height, world_z];
 
             let height = sample_height_world(
                 bounds.x + bounds.width,
@@ -842,16 +805,6 @@ impl QuadNode {
         for i in 0..edge_resolution {
             let normalized_x = i as f32 / (edge_resolution) as f32;
 
-            // let normalized_i = i as f32 / (edge_resolution - 1) as f32;
-            // let world_x = parent_bounds.x + (normalized_i * parent_bounds.width);
-            // let world_z = parent_bounds.z;
-
-            // let world_pos = [
-            //     world_x,
-            //     sample_height_world(world_x, world_z, height_data),
-            //     world_z,
-            // ];
-
             let world_pos = [
                 bounds.x + (normalized_x * bounds.width),
                 sample_height_world(
@@ -885,16 +838,6 @@ impl QuadNode {
         for i in 0..edge_resolution {
             let normalized_x = i as f32 / (edge_resolution) as f32;
 
-            // let normalized_i = i as f32 / (edge_resolution - 1) as f32;
-            // let world_x = parent_bounds.x + (normalized_i * parent_bounds.width);
-            // let world_z = parent_bounds.z + parent_bounds.width;
-
-            // let world_pos = [
-            //     world_x,
-            //     sample_height_world(world_x, world_z, height_data),
-            //     world_z,
-            // ];
-
             let world_pos = [
                 bounds.x + (normalized_x * bounds.width),
                 sample_height_world(
@@ -924,22 +867,33 @@ impl QuadNode {
             rapier_vertices.push(Point3::new(world_pos[0], world_pos[1], world_pos[2]));
         }
 
+        let mut min_height = f32::MAX;
+        let mut max_height = f32::MIN;
+
         // Now handle interior vertices
         for z in -1..=calc_res as i32 {
             for x in -1..=calc_res as i32 {
                 let normalized_x = x as f32 / (calc_res) as f32;
                 let normalized_z = z as f32 / (calc_res) as f32;
+                let height = sample_height_world(
+                    bounds.x + (normalized_x * bounds.width),
+                    bounds.z + (normalized_z * bounds.height),
+                    height_data,
+                );
                 let world_pos = [
                     bounds.x + (normalized_x * bounds.width),
-                    sample_height_world(
-                        bounds.x + (normalized_x * bounds.width),
-                        bounds.z + (normalized_z * bounds.height),
-                        height_data,
-                    ),
+                    height,
                     bounds.z + (normalized_z * bounds.height),
                 ];
                 let tex_x = (world_pos[0] + terrain_width / 2.0) / terrain_width;
                 let tex_z = (world_pos[2] + terrain_width / 2.0) / terrain_width;
+
+                if (z >= 0 && x >= 0 && z < calc_res as i32 && x < calc_res as i32) {
+                    height_matrix[(z as usize, x as usize)] = height; //  +/- (terrain_position[1] / 2.0)
+                }
+
+                min_height = min_height.min(height);
+                max_height = max_height.max(height);
 
                 interior_vertex_info.push(VertexInfo {
                     vertex: Vertex {
@@ -957,78 +911,16 @@ impl QuadNode {
             }
         }
 
-        // Create final vertex buffer from vertex_info
+        let height_diff = max_height - min_height;
+        let height_scale = height_diff / 600.0;
 
-        // // Generate indices for triangle strips
-        // for z in 0..calc_res - 1 {
-        //     for x in 0..calc_res - 1 {
-        //         let top_left = z * calc_res + x;
-        //         let top_right = top_left + 1;
-        //         let bottom_left = (z + 1) * calc_res + x;
-        //         let bottom_right = bottom_left + 1;
+        println!(
+            "height diff with 600.0: {:?} {:?}",
+            height_diff, height_scale
+        );
 
-        //         // First triangle (top-left, bottom-left, top-right)
-        //         indices.push(top_left);
-        //         indices.push(bottom_left);
-        //         indices.push(top_right);
-
-        //         // Second triangle (top-right, bottom-left, bottom-right)
-        //         indices.push(top_right);
-        //         indices.push(bottom_left);
-        //         indices.push(bottom_right);
-
-        //         // // Additional connections - are these needed??
-        //         // if x < calc_res - 2 {
-        //         //     // Connect to next column, but only if we're not at the quad edge
-        //         //     indices.extend_from_slice(&[
-        //         //         top_right as u32,
-        //         //         bottom_right as u32,
-        //         //         top_right + 1 as u32,
-        //         //     ]);
-        //         //     indices.extend_from_slice(&[
-        //         //         bottom_right as u32,
-        //         //         bottom_right + 1 as u32,
-        //         //         top_right + 1 as u32,
-        //         //     ]);
-        //         // }
-
-        //         // if z < calc_res - 2 {
-        //         //     // Connect to next row, but only if we're not at the quad edge
-        //         //     indices.extend_from_slice(&[
-        //         //         bottom_left as u32,
-        //         //         bottom_left + calc_res as u32,
-        //         //         bottom_right as u32,
-        //         //     ]);
-        //         //     indices.extend_from_slice(&[
-        //         //         bottom_right as u32,
-        //         //         bottom_left + calc_res as u32,
-        //         //         bottom_right + calc_res as u32,
-        //         //     ]);
-        //         // }
-        //     }
-        // }
-
-        // Create a fast lookup map after generating vertices
-        // TODO: some vertices overwriting others? or coming priority?
-        // let mut seen_positions = HashMap::new();
-        // let vertex_lookup: HashMap<(u32, u32), usize> = vertex_info
-        //     .iter()
-        //     .enumerate()
-        //     .map(|(index, info)| {
-        //         if let Some(prev_index) = seen_positions.get(&info.grid_pos) {
-        //             let vertex_item: &VertexInfo = &vertex_info[*prev_index];
-        //             println!(
-        //                 "Duplicate at grid_pos {:?}:\n  First vertex: {:?}\n  Second vertex: {:?}",
-        //                 info.grid_pos, vertex_item.vertex.position, info.vertex.position
-        //             );
-        //         }
-        //         seen_positions.insert(info.grid_pos, index);
-        //         (info.grid_pos, index)
-        //     })
-        //     .collect();
-
-        let overlap_distance = 0.5;
-        let proximity_threshold = 1000.0; // Adjust based on your vertex spacing
+        let overlap_distance = 0.15;
+        let proximity_threshold = 1.0; // Adjust based on your vertex spacing
 
         let mut extended_edge_vertex_info: Vec<VertexInfo> = Vec::new();
 
@@ -1073,7 +965,7 @@ impl QuadNode {
                     },
                     is_edge: true,
                     edge_index: sample.edge_index,
-                    grid_pos: sample.grid_pos, // Keep original grid position to maintain the mapping
+                    grid_pos: sample.grid_pos,
                 };
 
                 extended_edge_vertex_info.push(overlap_vertex);
@@ -1083,41 +975,20 @@ impl QuadNode {
         let extended_length = extended_edge_vertex_info.len();
 
         // Pre-calculate all related overlaps outside the loop
-        let mut related_overlaps = Vec::new();
-        let base_vertex_count = edge_vertex_info.len();
-        for idx in base_vertex_count..extended_length {
-            let vertex = &extended_edge_vertex_info[idx];
-            related_overlaps.push((idx, vertex.edge_index, vertex.vertex.position));
-        }
+        // let mut related_overlaps = Vec::new();
+        // let base_vertex_count = edge_vertex_info.len();
+        // for idx in base_vertex_count..extended_length {
+        //     let vertex = &extended_edge_vertex_info[idx];
+        //     related_overlaps.push((idx, vertex.edge_index, vertex.vertex.position));
+        // }
 
         let mut merged_vertex_info: Vec<VertexInfo> = Vec::new();
         let mut used_grid_positions: HashSet<(i32, i32)> = HashSet::new();
-
-        // // First, add all edge vertices
-        // for vertex_info in extended_edge_vertex_info {
-        //     used_grid_positions.insert(vertex_info.grid_pos);
-        //     merged_vertex_info.push(vertex_info);
-        // }
-
-        // // Then add interior vertices only if their grid position isn't taken
-        // for vertex_info in interior_vertex_info {
-        //     if !used_grid_positions.contains(&vertex_info.grid_pos) {
-        //         used_grid_positions.insert(vertex_info.grid_pos);
-        //         merged_vertex_info.push(vertex_info);
-        //     }
-        // }
 
         println!(
             "extended_edge_vertex_info {:?}",
             extended_edge_vertex_info.len()
         );
-
-        // Add edge vertices first (they take priority)
-        // actually already added above
-        // for vertex in &edge_vertex_info {
-        //     used_grid_positions.insert(vertex.grid_pos);
-        //     merged_vertex_info.push(vertex.clone());
-        // }
 
         // Add extended vertices if their grid position isn't taken
         for vertex in &extended_edge_vertex_info {
@@ -1155,7 +1026,7 @@ impl QuadNode {
             .map(|(index, info)| (info.grid_pos, index))
             .collect();
 
-        // Fast vertex lookup
+        // // Fast vertex lookup
         let mut indices = Vec::new();
 
         // Single loop for all indices since grid positions are now normalized to calc_res
@@ -1185,125 +1056,36 @@ impl QuadNode {
                         bottom_left as u32,
                         bottom_right as u32,
                     ]);
-                } else {
-                    println!("warning: missing vertex position");
                 }
+                // else {
+                //     println!("warning: missing vertex position");
+                // }
             }
         }
 
-        // // Now add triangles for our overlap vertices
-        // for (i, current) in edge_vertex_info.iter().enumerate() {
-        //     // Find the overlap vertices that were created from this edge vertex
-        //     let overlap_start_idx = edge_vertex_info.len() + i * overlap_vertices_per_edge;
+        // let mut vertices: Vec<Vertex> = Vec::new();
+        // let mut indices = Vec::new();
 
-        //     for j in 0..overlap_vertices_per_edge {
-        //         let overlap_idx = overlap_start_idx + j;
+        // // Final mesh validation
+        // let final_vertex_count = vertices.len();
+        // let final_index_count = indices.len();
+        // let indices_per_vertex = final_index_count as f32 / final_vertex_count as f32;
 
-        //         // Create a triangle between:
-        //         // - The current edge vertex
-        //         // - The next edge vertex (if it exists)
-        //         // - The overlap vertex
-        //         if i < edge_vertex_info.len() - 1 {
-        //             indices.push(i as u32);
-        //             indices.push((i + 1) as u32);
-        //             indices.push(overlap_idx as u32);
-        //         }
-        //     }
-        // }
+        // // For internal vertices: exactly 6 indices each (3 quads * 2 triangles)
+        // // For edge vertices: 4 indices each (2 quads * 2 triangles)
+        // // For corner vertices: 2 indices each (1 quad * 2 triangles)
+        // // Can calculate expected total based on your mesh structure
 
-        // After creating all regular indices...
+        // assert!(
+        //     indices_per_vertex <= 6.0,
+        //     "Too many indices per vertex: {}. Should never exceed 6.0 for a quad mesh",
+        //     indices_per_vertex
+        // );
 
-        // Add triangles for overlap vertices
-
-        // let mut additional_indices = Vec::new();
-
-        // // Now process each edge vertex
-        // for i in 0..edge_vertex_info.len() {
-        //     let current = &edge_vertex_info[i];
-
-        //     // Use the pre-calculated overlaps that match this edge vertex
-        //     for &(overlap_idx, edge_idx, _overlap_pos) in &related_overlaps {
-        //         if edge_idx == current.edge_index {
-        //             // Find the nearest edge vertex that isn't the current one
-        //             for j in 0..edge_vertex_info.len() {
-        //                 if i != j {
-        //                     let vertex = &edge_vertex_info[j];
-        //                     let dx = vertex.vertex.position[0] - current.vertex.position[0];
-        //                     let dz = vertex.vertex.position[2] - current.vertex.position[2];
-        //                     let metric_distance = (dx * dx + dz * dz).sqrt();
-
-        //                     if metric_distance < proximity_threshold {
-        //                         // Create a triangle
-        //                         additional_indices.push(i as u32);
-        //                         additional_indices.push(j as u32);
-        //                         additional_indices.push(overlap_idx as u32);
-        //                         break; // Found a suitable vertex to connect with
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-
-        // More selective triangle creation
-        // for i in 0..edge_vertex_info.len() {
-        //     let current = &edge_vertex_info[i];
-
-        //     // Only connect to the NEAREST valid edge vertex for each overlap
-        //     for &(overlap_idx, edge_idx, _overlap_pos) in &related_overlaps {
-        //         if edge_idx == current.edge_index {
-        //             // Find ONLY the nearest valid edge vertex
-        //             let mut nearest_distance = f32::MAX;
-        //             let mut nearest_idx = None;
-
-        //             for j in 0..edge_vertex_info.len() {
-        //                 if i != j {
-        //                     let vertex = &edge_vertex_info[j];
-        //                     let dx = vertex.vertex.position[0] - current.vertex.position[0];
-        //                     let dz = vertex.vertex.position[2] - current.vertex.position[2];
-        //                     let metric_distance = (dx * dx + dz * dz).sqrt();
-
-        //                     if metric_distance < proximity_threshold
-        //                         && metric_distance < nearest_distance
-        //                     {
-        //                         nearest_distance = metric_distance;
-        //                         nearest_idx = Some(j);
-        //                     }
-        //                 }
-        //             }
-
-        //             // Only create ONE triangle for this overlap with the nearest edge vertex
-        //             if let Some(j) = nearest_idx {
-        //                 additional_indices.push(i as u32);
-        //                 additional_indices.push(j as u32);
-        //                 additional_indices.push(overlap_idx as u32);
-        //             }
-        //         }
-        //     }
-        // }
-
-        // indices.extend(additional_indices);
-
-        // Final mesh validation
-        let final_vertex_count = vertices.len();
-        let final_index_count = indices.len();
-        let indices_per_vertex = final_index_count as f32 / final_vertex_count as f32;
-
-        // For internal vertices: exactly 6 indices each (3 quads * 2 triangles)
-        // For edge vertices: 4 indices each (2 quads * 2 triangles)
-        // For corner vertices: 2 indices each (1 quad * 2 triangles)
-        // Can calculate expected total based on your mesh structure
-
-        assert!(
-            indices_per_vertex <= 6.0,
-            "Too many indices per vertex: {}. Should never exceed 6.0 for a quad mesh",
-            indices_per_vertex
-        );
-
-        println!("Mesh validation passed:");
-        println!("Vertices: {}", final_vertex_count);
-        println!("Indices: {}", final_index_count);
-        println!("Indices per vertex: {:.2}", indices_per_vertex);
+        // println!("Mesh validation passed:");
+        // println!("Vertices: {}", final_vertex_count);
+        // println!("Indices: {}", final_index_count);
+        // println!("Indices per vertex: {:.2}", indices_per_vertex);
 
         println!("adding buffers");
 
@@ -1321,80 +1103,156 @@ impl QuadNode {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        // Create Rapier heightfield
-        // let heights = height_matrix;
-
-        // let scaling = vector![
-        //     bounds.width as f32,
-        //     1.0, // Height scale
-        //     bounds.height as f32
-        // ];
-
-        // let translation = vector![bounds.x, 0.0, bounds.z];
-        // let translation = vector![0.0, -220.0, 0.0];
-
         let isometry = Isometry3::translation(
             terrain_position[0],
             terrain_position[1],
             terrain_position[2],
         );
 
-        // let terrain_collider = ColliderBuilder::heightfield(heights.clone(), scaling)
-        //     .friction(0.9)
-        //     .restitution(0.1)
-        //     // .position(isometry)
-        //     // .translation(translation)
-        //     .user_data(
-        //         Uuid::from_str(&landscape_component_id)
-        //             .expect("Couldn't extract uuid")
-        //             .as_u128(),
-        //     )
-        //     .build();
-
         let closest_dist =
             get_camera_distance_from_bound_center_rel(bounds.clone(), terrain_position).sqrt();
 
         println!("closest_dist {:?}", closest_dist);
 
+        let mesh_duration = mesh_time.elapsed();
+        println!("  mesh_duration: {:?}", mesh_duration);
+
+        let lod_distances = calculate_lod_distances();
+
+        // let should_split = if depth < MAX_LOD_LEVELS as u32 {
+        //     should_split(
+        //         [camera.position.x, camera.position.y, camera.position.z],
+        //         &lod_distances,
+        //         terrain_position,
+        //         bounds.clone(),
+        //         depth,
+        //     )
+        // } else {
+        //     false
+        // };
+        let should_split = if depth == MAX_LOD_LEVELS as u32 {
+            false
+        } else {
+            true
+        };
+
         // TODO: set to reasonable amount
-        if (closest_dist < PHYSICS_DISTANCE) {
-            // let collider_time = Instant::now();
-
-            // let terrain_collider = ColliderBuilder::trimesh(
-            //     rapier_vertices,
-            //     indices
-            //         .chunks(3)
-            //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-            //         .collect::<Vec<[u32; 3]>>(),
-            // )
-            // .user_data(
-            //     Uuid::from_str(&landscape_component_id)
-            //         .expect("Couldn't extract uuid")
-            //         .as_u128(),
-            // )
-            // .build();
-
-            // let collider_duration = collider_time.elapsed();
-            // println!("  collider_duration: {:?}", collider_duration);
-
+        if (closest_dist < PHYSICS_DISTANCE && !should_split) {
             let sender = collider_sender.clone();
             let vertices = rapier_vertices.clone();
             let indices_clone = indices.clone();
             let chunk_id = mesh_id.clone();
+            let heights = height_matrix.clone();
+            // let translation = vector![-bounds.x / 2.0, -220.0, -bounds.z / 2.0];
 
-            println!("spawing collider");
+            // let translation = vector![-bounds.width / 2.0, -220.0, -bounds.height / 2.0];
+
+            let scaling: nalgebra::Matrix<
+                f32,
+                nalgebra::Const<3>,
+                nalgebra::Const<1>,
+                nalgebra::ArrayStorage<f32, 3, 1>,
+            > = vector![
+                bounds.width as f32,
+                1.0, // Height scale // values are 1-to-1
+                // height_scale,
+                bounds.height as f32
+            ];
+
+            // let isometry = Isometry3::translation(bounds.x, 0.0, bounds.z);
+
+            let isometry = match corner {
+                "top_left" => {
+                    // vector![-bounds.width, -220.0, -bounds.height]
+                    Isometry3::translation(-bounds.width / 2.0, -500.0, -bounds.height / 2.0)
+                    // Isometry3::translation(
+                    //     bounds.x,
+                    //     terrain_position[1],
+                    //     bounds.z,
+                    // )
+                }
+                "top_right" => {
+                    // vector![bounds.width, -220.0, -bounds.height]
+                    Isometry3::translation(bounds.width / 2.0, -500.0, -bounds.height / 2.0)
+                    // Isometry3::translation(
+                    //     bounds.x,
+                    //     terrain_position[1],
+                    //     bounds.z,
+                    // )
+                }
+                "bottom_left" => {
+                    // vector![-bounds.width, -220.0, bounds.height]
+                    Isometry3::translation(-bounds.width / 2.0, -500.0, bounds.height / 2.0)
+                    // Isometry3::translation(
+                    //     bounds.x
+                    //     terrain_position[1],
+                    //     bounds.z,
+                    // )
+                }
+                "bottom_right" => {
+                    // vector![bounds.width, -220.0, bounds.height]
+                    Isometry3::translation(bounds.width / 2.0, -500.0, bounds.height / 2.0)
+                    // Isometry3::translation(
+                    //     bounds.x,
+                    //     terrain_position[1],
+                    //     bounds.z,
+                    // )
+                }
+                _ => Isometry3::translation(
+                    terrain_position[0],
+                    terrain_position[1],
+                    terrain_position[2],
+                ),
+            };
+
+            let translation = match corner {
+                "top_left" => {
+                    vector![-bounds.width, -220.0, -bounds.height]
+                }
+                "top_right" => {
+                    vector![bounds.width, -220.0, -bounds.height]
+                }
+                "bottom_left" => {
+                    vector![-bounds.width, -220.0, bounds.height]
+                }
+                "bottom_right" => {
+                    vector![bounds.width, -220.0, bounds.height]
+                }
+                _ => {
+                    vector![0.0, 0.0, 0.0]
+                }
+            };
+
+            println!(
+                "spawning collider {:?} {:?} {:?}",
+                isometry, bounds.width, bounds.height
+            );
 
             // Spawn the heavy computation in a separate thread
             std::thread::spawn(move || {
-                let collider = ColliderBuilder::trimesh(
-                    vertices,
-                    indices_clone
-                        .chunks(3)
-                        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-                        .collect::<Vec<[u32; 3]>>(),
-                )
-                .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
-                .build();
+                // let collider = ColliderBuilder::trimesh(
+                //     vertices,
+                //     indices_clone
+                //         .chunks(3)
+                //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+                //         .collect::<Vec<[u32; 3]>>(),
+                // )
+                // .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
+                // .build();
+
+                let collider = ColliderBuilder::heightfield(heights.clone(), scaling)
+                    .friction(0.9)
+                    .restitution(0.1)
+                    // .position(isometry)
+                    // .translation(translation)
+                    .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
+                    .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
+                    .user_data(
+                        Uuid::from_str(&chunk_id)
+                            .expect("Couldn't extract uuid")
+                            .as_u128(),
+                    )
+                    .build();
 
                 // Send the completed collider back
                 sender.send((chunk_id, collider)).unwrap();
@@ -1409,11 +1267,16 @@ impl QuadNode {
 
             let rigid_time = Instant::now();
 
+            println!(
+                "Corner: {}, Final isometry: x={}, y={}, z={}",
+                corner, isometry.translation.x, isometry.translation.y, isometry.translation.z
+            );
+
             let ground_rigid_body = RigidBodyBuilder::fixed()
                 .position(isometry)
                 // .translation(translation)
                 .user_data(
-                    Uuid::from_str(&landscape_component_id)
+                    Uuid::from_str(&mesh_id)
                         .expect("Couldn't extract uuid")
                         .as_u128(),
                 )
@@ -1421,7 +1284,7 @@ impl QuadNode {
                 .build();
 
             let rigid_duration = rigid_time.elapsed();
-            println!("  rigid_duration: {:?}", rigid_duration);
+            // println!("  rigid_duration: {:?}", rigid_duration);
 
             TerrainMesh {
                 mesh_id,
@@ -1439,7 +1302,7 @@ impl QuadNode {
                 .position(isometry)
                 // .translation(translation)
                 .user_data(
-                    Uuid::from_str(&landscape_component_id)
+                    Uuid::from_str(&mesh_id)
                         .expect("Couldn't extract uuid")
                         .as_u128(),
                 )
@@ -1457,4 +1320,35 @@ impl QuadNode {
             }
         }
     }
+}
+
+pub fn should_split(
+    camera_pos: [f32; 3],
+    lod_distances: &Vec<f32>,
+    transform_position: [f32; 3],
+    bounds: Rect,
+    depth: u32,
+) -> bool {
+    // let closest_dist = get_camera_distance_from_bounds(self.bounds.clone(), transform_position);
+    let closest_dist =
+        get_camera_distance_from_bound_center_rel(bounds.clone(), transform_position);
+
+    // Calculate node size (diagonal)
+    let node_size = (bounds.width * bounds.width + bounds.height * bounds.height).sqrt();
+
+    // Calculate view-dependent error metric
+    // Split if we're close to any part of the node relative to its size
+    let error_threshold = node_size * 0.5; // Adjust this factor to control split aggressiveness
+    let should_split = closest_dist < (lod_distances[depth as usize] * error_threshold).powi(2);
+
+    // println!(
+    //     "Depth: {}, Node size: {:.2}, Closest dist: {:.2}, Threshold: {:.2}, Split: {}",
+    //     self.depth,
+    //     node_size,
+    //     closest_dist.sqrt(),
+    //     lod_distances[self.depth as usize] * error_threshold,
+    //     should_split
+    // );
+
+    should_split
 }

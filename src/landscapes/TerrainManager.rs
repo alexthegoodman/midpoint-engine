@@ -11,6 +11,7 @@ use uuid::Uuid;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
+use crate::core::PlayerCharacter::PlayerCharacter;
 use crate::core::Texture::Texture;
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
 use crate::handlers::{get_camera, Vertex};
@@ -90,6 +91,7 @@ impl TerrainManager {
             terrain_position,
             landscapeComponentId.clone(),
             sender.clone(),
+            "none",
         );
 
         // set uniform buffer for transforms
@@ -176,6 +178,7 @@ impl TerrainManager {
             if let Some(ref mut children) = node.children {
                 for child in children.iter_mut() {
                     if let Some(found) = recurse_children(child, &chunk_id) {
+                        // println!("found chunk {:?}", chunk_id);
                         return Some(found);
                     }
                 }
@@ -197,6 +200,8 @@ impl TerrainManager {
         impulse_joint_set: &mut ImpulseJointSet,
         multibody_joint_set: &mut MultibodyJointSet,
         delta_time: f32,
+        // debug_character: PlayerCharacter,
+        // query_pipeline: &mut QueryPipeline,
     ) {
         self.lod_update_timer += delta_time;
 
@@ -206,16 +211,18 @@ impl TerrainManager {
             if let Some(chunk) = self.find_chunk_by_id(&chunk_id) {
                 // Add collider to chunk's mesh
                 if let Some(ref mut mesh) = chunk.mesh {
-                    println!("attaching collider");
+                    println!("attaching collider {:?}", mesh.mesh_id);
                     // mesh.collider = Some(collider);
                     // Now you can add it to physics world if needed
-                    add_physics_components_mini(
-                        rigid_body_set,
-                        collider_set,
-                        device,
-                        chunk,
-                        collider,
-                    );
+                    if (chunk.children.is_none()) {
+                        add_physics_components_mini(
+                            rigid_body_set,
+                            collider_set,
+                            device,
+                            chunk,
+                            collider,
+                        );
+                    }
                 }
             }
         }
@@ -224,7 +231,7 @@ impl TerrainManager {
         if self.lod_update_timer >= self.lod_update_interval {
             let update_time = Instant::now();
 
-            let lod_distances = self.calculate_lod_distances();
+            let lod_distances = calculate_lod_distances();
 
             println!("update lods? {:?} {:?}", lod_distances, camera_pos);
 
@@ -246,7 +253,7 @@ impl TerrainManager {
 
             // Only update physics if LOD changed
             // if lod_changed {
-            println!("update_physics_if_needed");
+            // println!("update_physics_if_needed");
             self.root.update_physics_if_needed(
                 rigid_body_set,
                 collider_set,
@@ -272,39 +279,61 @@ impl TerrainManager {
         }
     }
 
-    // For debugging/profiling
+    // // For debugging/profiling
+    // pub fn get_active_physics_count(&self) -> (usize, usize) {
+    //     // (bodies, colliders)
+    //     let mut body_count = 0;
+    //     let mut collider_count = 0;
+    //     let mut depth = 0;
+
+    //     fn count_physics(node: &QuadNode, mut depth: i32) -> (usize, usize) {
+    //         let mut bodies = node.rigid_body_handle.is_some() as usize;
+    //         let mut colliders = node.collider_handle.is_some() as usize;
+
+    //         if (colliders > 0) {
+    //             println!("match depth {:?}", depth);
+    //         }
+
+    //         if let Some(ref children) = node.children {
+    //             for child in children.iter() {
+    //                 let (b, c) = count_physics(child, depth);
+    //                 bodies += b;
+    //                 colliders += c;
+    //             }
+    //         }
+    //         depth = depth + 1;
+    //         (bodies, colliders)
+    //     }
+
+    //     count_physics(&self.root, depth)
+    // }
+
     pub fn get_active_physics_count(&self) -> (usize, usize) {
         // (bodies, colliders)
-        let mut body_count = 0;
-        let mut collider_count = 0;
-
-        fn count_physics(node: &QuadNode) -> (usize, usize) {
+        fn count_physics(node: &QuadNode, depth: i32) -> (usize, usize, i32) {
             let mut bodies = node.rigid_body_handle.is_some() as usize;
             let mut colliders = node.collider_handle.is_some() as usize;
 
+            if colliders > 0 {
+                println!("match depth {}", depth);
+            }
+
+            let mut max_depth = depth;
             if let Some(ref children) = node.children {
                 for child in children.iter() {
-                    let (b, c) = count_physics(child);
+                    let (b, c, child_depth) = count_physics(child, depth + 1);
                     bodies += b;
                     colliders += c;
+                    max_depth = max_depth.max(child_depth);
                 }
             }
-            (bodies, colliders)
+
+            (bodies, colliders, max_depth)
         }
 
-        count_physics(&self.root)
-    }
-
-    pub fn calculate_lod_distances(&self) -> Vec<f32> {
-        let mut distances = Vec::with_capacity(MAX_LOD_LEVELS);
-        let mut current_distance = BASE_LOD_DISTANCE;
-
-        for _ in 0..MAX_LOD_LEVELS {
-            distances.push(current_distance);
-            current_distance *= LOD_DISTANCE_MULTIPLIER;
-        }
-
-        distances
+        let (bodies, colliders, max_depth) = count_physics(&self.root, 0);
+        println!("Max depth reached: {}", max_depth);
+        (bodies, colliders)
     }
 
     // may move to nodes management
@@ -420,4 +449,16 @@ impl TerrainManager {
             }));
         }
     }
+}
+
+pub fn calculate_lod_distances() -> Vec<f32> {
+    let mut distances = Vec::with_capacity(MAX_LOD_LEVELS);
+    let mut current_distance = BASE_LOD_DISTANCE;
+
+    for _ in 0..MAX_LOD_LEVELS {
+        distances.push(current_distance);
+        current_distance *= LOD_DISTANCE_MULTIPLIER;
+    }
+
+    distances
 }

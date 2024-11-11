@@ -1,5 +1,6 @@
 use image::DynamicImage;
 use nalgebra::{Isometry3, Matrix4, Point3, Vector3};
+use rapier3d::parry::query::Ray;
 use rapier3d::prelude::*;
 use rapier3d::prelude::{Collider, ColliderBuilder, RigidBody, RigidBodyBuilder};
 use std::num::NonZeroU32;
@@ -193,10 +194,15 @@ pub fn get_camera_distance_from_bound_center_rel(
     let camera = get_camera();
 
     // Get node corners in world space
+    // let center = [
+    //     transform_position[0] + bounds.x + (bounds.width / 2.0),
+    //     camera.position[1],
+    //     transform_position[2] + bounds.z + (bounds.height / 2.0),
+    // ];
     let center = [
-        transform_position[0] + bounds.x + (bounds.width / 2.0),
+        bounds.x + (bounds.width / 2.0), // transform should be applied at root mesh creation?
         camera.position[1],
-        transform_position[2] + bounds.z + (bounds.height / 2.0),
+        bounds.z + (bounds.height / 2.0),
     ];
 
     // Find closest point to camera
@@ -252,55 +258,78 @@ pub fn get_camera_distance_from_bounds_rel(bounds: Rect, transform_position: [f3
     closest_dist
 }
 
+// pub fn add_physics_components_mini(
+//     rigid_body_set: &mut RigidBodySet,
+//     collider_set: &mut ColliderSet,
+//     device: &wgpu::Device,
+//     // mesh: &mut TerrainMesh,
+//     quad: &mut QuadNode,
+//     collider: Collider,
+// ) {
+//     if let Some(ref mut mesh) = quad.mesh {
+//         // Get rigid body
+//         if let Some(ref rigid_body) = mesh.rigid_body {
+//             let rigid_body_handle = rigid_body_set.insert(rigid_body.clone());
+//             quad.rigid_body_handle = Some(rigid_body_handle);
+
+//             println!(
+//                 "Actual rigid_body world position: {:?}",
+//                 rigid_body.position()
+//             );
+
+//             println!("landscape collider insert_with_parent");
+
+//             let collider_handle =
+//                 collider_set.insert_with_parent(collider, rigid_body_handle, rigid_body_set);
+//             quad.collider_handle = Some(collider_handle);
+
+//             if let Some(collider) = collider_set.get(collider_handle) {
+//                 // Access the collider here
+//                 let position = collider.position();
+//                 println!("Collider position: {:?}", position);
+//                 if let Some(debug_mesh) = create_debug_collision_mesh(&collider, device, position) {
+//                     quad.debug_mesh = Some(debug_mesh);
+//                 }
+//             }
+//         }
+//     }
+// }
+
 pub fn add_physics_components_mini(
     rigid_body_set: &mut RigidBodySet,
     collider_set: &mut ColliderSet,
     device: &wgpu::Device,
-    // mesh: &mut TerrainMesh,
     quad: &mut QuadNode,
     collider: Collider,
 ) {
-    // Only add physics for chunks at deeper levels (e.g., more detailed)
-    // let min_physics_depth = 2; // Tune this value
-    // if self.depth >= min_physics_depth {
-    println!("landscape collider add_physics_components");
     if let Some(ref mut mesh) = quad.mesh {
-        // Get rigid body
-        println!("landscape collider self.mesh");
-        // if let Some(rigid_body) = mesh.rigid_body.take() {
-        if let Some(ref rigid_body) = mesh.rigid_body {
-            let rigid_body_handle = rigid_body_set.insert(rigid_body.clone());
+        // Take ownership of the rigid body instead of cloning
+        if let Some(rigid_body) = mesh.rigid_body.take() {
+            // Use take() to move ownership
+            let rigid_body_handle = rigid_body_set.insert(rigid_body); // No clone needed
             quad.rigid_body_handle = Some(rigid_body_handle);
-            println!("landscape collider rigid_body");
-            // Create and attach collider if we have one
-            // if let Some(collider) = mesh.collider.take() {
-            //     // if let Some(debug_mesh) = create_debug_collision_mesh(&collider, device) {
-            //     //     self.debug_mesh = Some(debug_mesh);
-            //     // }
 
-            //     println!("landscape collider insert_with_parent");
+            println!(
+                "Actual rigid_body world position: {:?}",
+                rigid_body_set.get(rigid_body_handle).unwrap().position()
+            );
 
-            //     let collider_handle =
-            //         collider_set.insert_with_parent(collider, rigid_body_handle, rigid_body_set);
-            //     quad.collider_handle = Some(collider_handle);
-            // }
-
-            // match &mesh.collider {
-            //     Some(_) => println!("Collider exists before take"),
-            //     None => println!("No collider before take"),
-            // }
-
-            // // Use as_ref() or clone() instead of take()
-            // if let Some(ref collider) = mesh.collider {
             println!("landscape collider insert_with_parent");
 
             let collider_handle =
                 collider_set.insert_with_parent(collider, rigid_body_handle, rigid_body_set);
             quad.collider_handle = Some(collider_handle);
-            // }
+
+            if let Some(collider) = collider_set.get(collider_handle) {
+                // Access the collider here
+                let position = collider.position();
+                println!("Collider position: {:?}", position);
+                if let Some(debug_mesh) = create_debug_collision_mesh(&collider, device, position) {
+                    quad.debug_mesh = Some(debug_mesh);
+                }
+            }
         }
     }
-    // }
 }
 
 // Utility function to calculate squared distance between two 3D points
@@ -311,8 +340,43 @@ pub fn distance_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     dx * dx + dy * dy + dz * dz
 }
 
-pub fn create_debug_collision_mesh(collider: &Collider, device: &Device) -> Option<TerrainMesh> {
+use rand::prelude::*;
+use rand::Rng;
+
+pub fn create_debug_collision_mesh(
+    collider: &Collider,
+    device: &Device,
+    position: &Isometry3<f32>,
+) -> Option<TerrainMesh> {
+    // For heightfield
+    // println!(
+    //     "Heightfield collision groups: {:?}",
+    //     collider.collision_groups()
+    // );
+    // println!("Heightfield solver groups: {:?}", collider.solver_groups());
+    // println!("Is sensor: {:?}", collider.is_sensor());
+    println!("Collider parent handle: {:?}", collider.parent());
+
     if let Some(shape) = collider.shape().as_heightfield() {
+        // Cast a ray from above the heightfield straight down
+        // let start = Point3::new(0.0, 100.0, 0.0);
+        // let direction = Vector3::new(0.0, 1.0, 0.0);
+        // if let Some(intersection) = shape.cast_local_ray(
+        //     &Ray::new(start, direction),
+        //     f32::MAX,
+        //     true, // solid
+        // ) {
+        //     // Calculate intersection point in world space
+        //     let hit_point = start + direction * intersection;
+        //     println!("Intersection at world position: {:?}", hit_point);
+        //     println!("Relative to origin: {:?}", hit_point - Point3::origin());
+        //     //    println!("Current rigid body position: {:?}", rb_pos.translation);
+        //     //    // This difference might tell us what offset we need
+        //     //    println!("Offset needed: {:?}", hit_point.coords - rb_pos.translation.vector);
+        // } else {
+        //     println!("No intersection found with ray!");
+        // }
+
         // Debug print the heightfield properties
         println!("Heightfield properties:");
         println!("  Scale: {:?}", shape.scale());
@@ -321,6 +385,15 @@ pub fn create_debug_collision_mesh(collider: &Collider, device: &Device) -> Opti
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut vertex_index = 0;
+
+        // Generate random UV coordinates for color
+        let mut rng = rand::thread_rng();
+        let random_uv = [
+            rng.gen_range(0.0..1.0), // U
+            rng.gen_range(0.0..1.0), // V
+        ];
+
+        println!("Generated random UV coordinates for color: {:?}", random_uv);
 
         // Print some height values from the heightfield directly
         println!("Raw height samples:");
@@ -347,24 +420,32 @@ pub fn create_debug_collision_mesh(collider: &Collider, device: &Device) -> Opti
                 println!("  C: {:?}", triangle.c);
             }
 
-            // Add vertices
+            let tri_a = position * triangle.a;
+            let tri_b = position * triangle.b;
+            let tri_c = position * triangle.c;
+
+            // let tri_a = triangle.a;
+            // let tri_b = triangle.b;
+            // let tri_c = triangle.c;
+
+            // Add vertices with random UV coordinates
             vertices.push(Vertex {
-                position: [triangle.a.x, triangle.a.y, triangle.a.z],
-                normal: [0.0, 1.0, 0.0], // We could calculate proper normals if needed
-                tex_coords: [0.0, 0.0],  // Not needed for debug visualization
-                color: [1.0, 0.0, 0.0],  // Red for debug visualization
+                position: [tri_a.x, tri_a.y, tri_a.z],
+                normal: [0.0, 1.0, 0.0],
+                tex_coords: random_uv, // Use the same random UV for all vertices
+                color: [1.0, 1.0, 1.0], // Default white color since we're using UVs for color
             });
             vertices.push(Vertex {
-                position: [triangle.b.x, triangle.b.y, triangle.b.z],
+                position: [tri_b.x, tri_b.y, tri_b.z],
                 normal: [0.0, 1.0, 0.0],
-                tex_coords: [0.0, 0.0],
-                color: [1.0, 0.0, 0.0],
+                tex_coords: random_uv,
+                color: [1.0, 1.0, 1.0],
             });
             vertices.push(Vertex {
-                position: [triangle.c.x, triangle.c.y, triangle.c.z],
+                position: [tri_c.x, tri_c.y, tri_c.z],
                 normal: [0.0, 1.0, 0.0],
-                tex_coords: [0.0, 0.0],
-                color: [1.0, 0.0, 0.0],
+                tex_coords: random_uv,
+                color: [1.0, 1.0, 1.0],
             });
 
             // Add indices for this triangle
@@ -403,8 +484,8 @@ pub fn create_debug_collision_mesh(collider: &Collider, device: &Device) -> Opti
             vertex_buffer,
             index_buffer,
             index_count: indices.len() as u32,
-            collider: None, // No need for physics on debug mesh
-            rigid_body: Some(RigidBodyBuilder::fixed().build()), // Dummy rigid body
+            collider: None,
+            rigid_body: Some(RigidBodyBuilder::fixed().build()),
             depth: 1,
         })
     } else {

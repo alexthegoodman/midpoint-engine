@@ -10,6 +10,7 @@ use wgpu::BindGroupLayout;
 use crate::animations::render_skeleton::SkeletonRenderPart;
 use crate::animations::skeleton::Joint;
 use crate::handlers::get_camera;
+use crate::landscapes::QuadNode::QuadNode;
 use crate::landscapes::TerrainManager::TerrainManager;
 use crate::{
     core::Texture::Texture,
@@ -362,6 +363,17 @@ impl RendererState {
 
         self.update_terrain_managers(device, dt);
 
+        // println!("Before step:");
+        // println!("  Bodies: {}", self.rigid_body_set.len());
+        // println!("  Colliders: {}", self.collider_set.len());
+        // println!("  Impulse Joints: {}", self.impulse_joint_set.len());
+        // // println!("  Multibody Joints: {}", self.multibody_joint_set.len());
+        // println!(
+        //     "  Islands: {} {}",
+        //     self.island_manager.active_dynamic_bodies().len(),
+        //     self.island_manager.active_kinematic_bodies().len()
+        // );
+
         let step_time = Instant::now();
 
         // Step the physics pipeline
@@ -385,7 +397,9 @@ impl RendererState {
         );
 
         let step_duration = step_time.elapsed();
-        // println!("  step_duration: {:?}", step_duration);
+        println!("  step_duration: {:?}", step_duration);
+
+        let physics_update_time = Instant::now();
 
         // Collect all the necessary data first
         let physics_updates: Vec<(Uuid, nalgebra::Vector3<f32>, (f32, f32, f32))> = self
@@ -400,6 +414,14 @@ impl RendererState {
                 (component_id, position, euler)
             })
             .collect();
+
+        let physics_update_duration = physics_update_time.elapsed();
+        println!(
+            "  physics_update collect _duration: {:?}",
+            physics_update_duration
+        );
+
+        let physics_update_time = Instant::now();
 
         // Update camera position if needed
         if let Some(rb_handle) = self.player_character.movement_rigid_body_handle {
@@ -466,6 +488,9 @@ impl RendererState {
                     .update_rotation([euler.0, euler.1, euler.2]);
             }
         }
+
+        let physics_update_duration = physics_update_time.elapsed();
+        println!("  physics_update_duration: {:?}", physics_update_duration);
     }
 
     // Usage in your main update/render loop:
@@ -817,6 +842,70 @@ impl RendererState {
                 .terrain_managers
                 .get_mut(0)
                 .expect("Couldn't get first terrain manager");
+
+            // debug:
+            if let Some(rb_handle) = self.player_character.movement_rigid_body_handle {
+                if let Some(rb) = self.rigid_body_set.get(rb_handle) {
+                    let character_pos = rb.position();
+
+                    // let camera = get_camera();
+                    // let character_pos = camera.position;
+
+                    // Cast slightly above character's feet
+                    let ray_start = character_pos * Point3::new(0.0, 0.1, 0.0);
+                    let ray_dir = Vector3::new(0.0, -1.0, 0.0);
+
+                    // let ray_start = character_pos + Vector3::new(0.0, 0.1, 0.0); // Add a vector to offset the point
+                    // let ray_dir = Vector3::new(0.0, -1.0, 0.0);
+
+                    // Safely traverse the tree to get the collider handle
+                    // let collider_handle = terrain_manager
+                    //     .root
+                    //     .children
+                    //     .as_ref()
+                    //     .and_then(|children| children.get(0))
+                    //     .and_then(|node| node.children.as_ref())
+                    //     .and_then(|children| children.get(0))
+                    //     .and_then(|node| node.children.as_ref())
+                    //     .and_then(|children| children.get(0))
+                    //     .and_then(|node| node.children.as_ref())
+                    //     .and_then(|children| children.get(0))
+                    //     .and_then(|node| node.children.as_ref())
+                    //     .and_then(|children| children.get(0))
+                    //     .and_then(|node| node.collider_handle);
+
+                    let collider_handle = find_first_collider_handle(&terrain_manager.root);
+
+                    println!(
+                        "Check collider handle {:?} {:?}",
+                        character_pos,
+                        collider_handle.is_some()
+                    );
+
+                    if let Some(handle) = collider_handle {
+                        // Use QueryPipeline for ray casting
+                        let hit = self.query_pipeline.cast_ray(
+                            &self.rigid_body_set,
+                            &self.collider_set,
+                            &Ray::new(ray_start, ray_dir),
+                            f32::MAX,
+                            true,
+                            QueryFilter::default().exclude_rigid_body(rb_handle), // Exclude the character's own collider
+                        );
+
+                        if let Some((_, intersection)) = hit {
+                            let hit_point: nalgebra::OPoint<f32, nalgebra::Const<3>> =
+                                ray_start + ray_dir * intersection;
+                            println!("Ground intersection at: {:?}", hit_point);
+                            println!("Character position: {:?}", character_pos);
+                            println!("Distance to ground: {:?}", intersection);
+                        } else {
+                            println!("no intersect!");
+                        }
+                    }
+                }
+            }
+
             terrain_manager.update(
                 [camera.position.x, camera.position.y, camera.position.z],
                 device,
@@ -827,6 +916,7 @@ impl RendererState {
                 &mut self.multibody_joint_set, // terrain_manager.terrain_position,
                 // terrain_manager.id.clone(),
                 dt,
+                // &mut self.query_pipeline,
             );
         }
     }
@@ -912,6 +1002,24 @@ impl RendererState {
 
         self.skeleton_parts.push(skeleton_part);
     }
+}
+
+fn find_first_collider_handle(node: &QuadNode) -> Option<ColliderHandle> {
+    // Check if current node has a collider
+    if let Some(handle) = node.collider_handle {
+        return Some(handle);
+    }
+
+    // If not, recursively check children
+    if let Some(ref children) = node.children {
+        for child in children.iter() {
+            if let Some(handle) = find_first_collider_handle(child) {
+                return Some(handle);
+            }
+        }
+    }
+
+    None
 }
 
 static RENDERING_PAUSED: AtomicBool = AtomicBool::new(false);
