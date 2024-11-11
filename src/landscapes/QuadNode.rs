@@ -186,7 +186,8 @@ impl QuadNode {
         landscape_component_id: String,
         collider_sender: Sender<ColliderMessage>,
     ) {
-        if self.depth >= max_depth {
+        if self.depth + 1 >= max_depth {
+            // plus 1 to account for next depth
             return;
         }
 
@@ -347,7 +348,7 @@ impl QuadNode {
         landscape_component_id: String,
         collider_sender: Sender<ColliderMessage>,
     ) -> bool {
-        if self.depth >= max_depth {
+        if self.depth + 1 >= max_depth {
             return false;
         }
 
@@ -498,7 +499,7 @@ impl QuadNode {
         }
 
         let if_needed_duration = if_needed_time.elapsed();
-        println!("  if_needed_duration: {:?}", if_needed_duration);
+        // println!("  if_needed_duration: {:?}", if_needed_duration);
 
         self.lod_dirty = false;
         true
@@ -574,16 +575,29 @@ impl QuadNode {
         // depth 2 -> 64
         // depth 3 -> 128
         // depth 4 -> 256
+        // match depth {
+        //     0 => 16,
+        //     1 => 32,
+        //     2 => 64,
+        //     3 => 128,
+        //     4 => 256,
+        //     5 => 512,
+        //     6 => 1024,
+        //     7 => 2048,
+        //     8 => 4096,
+        //     _ => 16,
+        // }
+        // medium range?
         match depth {
             0 => 16,
-            1 => 32,
-            2 => 64,
-            3 => 128,
-            4 => 256,
-            5 => 512,
-            6 => 1024,
-            7 => 2048,
-            8 => 4096,
+            1 => 16,
+            2 => 16,
+            3 => 32,
+            4 => 32,
+            5 => 32,
+            6 => 64,
+            7 => 64,
+            8 => 64,
             _ => 16,
         }
         // very low quality
@@ -617,7 +631,7 @@ impl QuadNode {
 
         let mesh_id = Uuid::new_v4().to_string();
 
-        println!("chunk_id {:?}", mesh_id);
+        // println!("chunk_id {:?}", mesh_id);
 
         let calc_res = Self::get_resolution_for_depth(depth);
 
@@ -626,13 +640,13 @@ impl QuadNode {
         let terrain_width = (height_data.len() as f32).sqrt() as f32;
         let terrain_half_width = terrain_width / 2.0;
 
-        println!(
-            "width calc {:?} {:?} {:?}",
-            terrain_width, edge_resolution, calc_res
-        );
+        // println!(
+        //     "width calc {:?} {:?} {:?}",
+        //     terrain_width, edge_resolution, calc_res
+        // );
 
         let camera = get_camera();
-        println!("create mesh, cam pos: {:?}", camera.position);
+        // println!("create mesh, cam pos: {:?}", camera.position);
 
         let mut rapier_vertices = Vec::new();
 
@@ -643,7 +657,7 @@ impl QuadNode {
         let sample_distance = bounds.width / edge_resolution as f32; // Distance between samples
                                                                      // let sample_distance = 10.0;
                                                                      // let sample_distance = 0.1;
-        println!("sample_distance {:?}", sample_distance);
+                                                                     // println!("sample_distance {:?}", sample_distance);
         let mut potential_overlaps = Vec::new();
 
         // Sample points just outside our bounds to heal LOD cracks
@@ -914,10 +928,10 @@ impl QuadNode {
         let height_diff = max_height - min_height;
         let height_scale = height_diff / 600.0;
 
-        println!(
-            "height diff with 600.0: {:?} {:?}",
-            height_diff, height_scale
-        );
+        // println!(
+        //     "height diff with 600.0: {:?} {:?}",
+        //     height_diff, height_scale
+        // );
 
         let overlap_distance = 0.15;
         let proximity_threshold = 1.0; // Adjust based on your vertex spacing
@@ -985,10 +999,10 @@ impl QuadNode {
         let mut merged_vertex_info: Vec<VertexInfo> = Vec::new();
         let mut used_grid_positions: HashSet<(i32, i32)> = HashSet::new();
 
-        println!(
-            "extended_edge_vertex_info {:?}",
-            extended_edge_vertex_info.len()
-        );
+        // println!(
+        //     "extended_edge_vertex_info {:?}",
+        //     extended_edge_vertex_info.len()
+        // );
 
         // Add extended vertices if their grid position isn't taken
         for vertex in &extended_edge_vertex_info {
@@ -1087,7 +1101,7 @@ impl QuadNode {
         // println!("Indices: {}", final_index_count);
         // println!("Indices per vertex: {:.2}", indices_per_vertex);
 
-        println!("adding buffers");
+        // println!("adding buffers");
 
         // Create vertex buffer
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1112,213 +1126,214 @@ impl QuadNode {
         let closest_dist =
             get_camera_distance_from_bound_center_rel(bounds.clone(), terrain_position).sqrt();
 
-        println!("closest_dist {:?}", closest_dist);
+        // println!("closest_dist {:?}", closest_dist);
 
         let mesh_duration = mesh_time.elapsed();
-        println!("  mesh_duration: {:?}", mesh_duration);
+        // println!("  mesh_duration: {:?}", mesh_duration);
 
         let lod_distances = calculate_lod_distances();
 
-        // let should_split = if depth < MAX_LOD_LEVELS as u32 {
-        //     should_split(
-        //         [camera.position.x, camera.position.y, camera.position.z],
-        //         &lod_distances,
-        //         terrain_position,
-        //         bounds.clone(),
-        //         depth,
-        //     )
-        // } else {
-        //     false
-        // };
-        let should_split = if depth == MAX_LOD_LEVELS as u32 {
-            false
+        let should_split = if depth < MAX_LOD_LEVELS as u32 {
+            should_split(
+                [camera.position.x, camera.position.y, camera.position.z],
+                &lod_distances,
+                terrain_position,
+                bounds.clone(),
+                depth,
+            )
         } else {
-            true
+            false
         };
+        // let should_split = if depth == MAX_LOD_LEVELS as u32 {
+        //     false
+        // } else {
+        //     true
+        // };
 
         // TODO: set to reasonable amount
-        if (closest_dist < PHYSICS_DISTANCE && !should_split) {
-            let sender = collider_sender.clone();
-            let vertices = rapier_vertices.clone();
-            let indices_clone = indices.clone();
-            let chunk_id = mesh_id.clone();
-            let heights = height_matrix.clone();
-            // let translation = vector![-bounds.x / 2.0, -220.0, -bounds.z / 2.0];
+        // if (closest_dist < PHYSICS_DISTANCE && !should_split) {
+        // if (!should_split) {
+        let sender = collider_sender.clone();
+        let vertices = rapier_vertices.clone();
+        let indices_clone = indices.clone();
+        let chunk_id = mesh_id.clone();
+        let heights = height_matrix.clone();
+        // let translation = vector![-bounds.x / 2.0, -220.0, -bounds.z / 2.0];
 
-            // let translation = vector![-bounds.width / 2.0, -220.0, -bounds.height / 2.0];
+        // let translation = vector![-bounds.width / 2.0, -220.0, -bounds.height / 2.0];
 
-            let scaling: nalgebra::Matrix<
-                f32,
-                nalgebra::Const<3>,
-                nalgebra::Const<1>,
-                nalgebra::ArrayStorage<f32, 3, 1>,
-            > = vector![
-                bounds.width as f32,
-                1.0, // Height scale // values are 1-to-1
-                // height_scale,
-                bounds.height as f32
-            ];
+        let scaling: nalgebra::Matrix<
+            f32,
+            nalgebra::Const<3>,
+            nalgebra::Const<1>,
+            nalgebra::ArrayStorage<f32, 3, 1>,
+        > = vector![
+            bounds.width as f32,
+            1.0, // Height scale // values are 1-to-1
+            // height_scale,
+            bounds.height as f32
+        ];
 
-            // let isometry = Isometry3::translation(bounds.x, 0.0, bounds.z);
+        // let isometry = Isometry3::translation(bounds.x, 0.0, bounds.z);
 
-            let isometry = match corner {
-                "top_left" => {
-                    // vector![-bounds.width, -220.0, -bounds.height]
-                    Isometry3::translation(-bounds.width / 2.0, -500.0, -bounds.height / 2.0)
-                    // Isometry3::translation(
-                    //     bounds.x,
-                    //     terrain_position[1],
-                    //     bounds.z,
-                    // )
-                }
-                "top_right" => {
-                    // vector![bounds.width, -220.0, -bounds.height]
-                    Isometry3::translation(bounds.width / 2.0, -500.0, -bounds.height / 2.0)
-                    // Isometry3::translation(
-                    //     bounds.x,
-                    //     terrain_position[1],
-                    //     bounds.z,
-                    // )
-                }
-                "bottom_left" => {
-                    // vector![-bounds.width, -220.0, bounds.height]
-                    Isometry3::translation(-bounds.width / 2.0, -500.0, bounds.height / 2.0)
-                    // Isometry3::translation(
-                    //     bounds.x
-                    //     terrain_position[1],
-                    //     bounds.z,
-                    // )
-                }
-                "bottom_right" => {
-                    // vector![bounds.width, -220.0, bounds.height]
-                    Isometry3::translation(bounds.width / 2.0, -500.0, bounds.height / 2.0)
-                    // Isometry3::translation(
-                    //     bounds.x,
-                    //     terrain_position[1],
-                    //     bounds.z,
-                    // )
-                }
-                _ => Isometry3::translation(
-                    terrain_position[0],
-                    terrain_position[1],
-                    terrain_position[2],
-                ),
-            };
-
-            let translation = match corner {
-                "top_left" => {
-                    vector![-bounds.width, -220.0, -bounds.height]
-                }
-                "top_right" => {
-                    vector![bounds.width, -220.0, -bounds.height]
-                }
-                "bottom_left" => {
-                    vector![-bounds.width, -220.0, bounds.height]
-                }
-                "bottom_right" => {
-                    vector![bounds.width, -220.0, bounds.height]
-                }
-                _ => {
-                    vector![0.0, 0.0, 0.0]
-                }
-            };
-
-            println!(
-                "spawning collider {:?} {:?} {:?}",
-                isometry, bounds.width, bounds.height
-            );
-
-            // Spawn the heavy computation in a separate thread
-            std::thread::spawn(move || {
-                // let collider = ColliderBuilder::trimesh(
-                //     vertices,
-                //     indices_clone
-                //         .chunks(3)
-                //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-                //         .collect::<Vec<[u32; 3]>>(),
+        let isometry = match corner {
+            "top_left" => {
+                // vector![-bounds.width, -220.0, -bounds.height]
+                Isometry3::translation(-bounds.width / 2.0, -500.0, -bounds.height / 2.0)
+                // Isometry3::translation(
+                //     bounds.x,
+                //     terrain_position[1],
+                //     bounds.z,
                 // )
-                // .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
-                // .build();
+            }
+            "top_right" => {
+                // vector![bounds.width, -220.0, -bounds.height]
+                Isometry3::translation(bounds.width / 2.0, -500.0, -bounds.height / 2.0)
+                // Isometry3::translation(
+                //     bounds.x,
+                //     terrain_position[1],
+                //     bounds.z,
+                // )
+            }
+            "bottom_left" => {
+                // vector![-bounds.width, -220.0, bounds.height]
+                Isometry3::translation(-bounds.width / 2.0, -500.0, bounds.height / 2.0)
+                // Isometry3::translation(
+                //     bounds.x
+                //     terrain_position[1],
+                //     bounds.z,
+                // )
+            }
+            "bottom_right" => {
+                // vector![bounds.width, -220.0, bounds.height]
+                Isometry3::translation(bounds.width / 2.0, -500.0, bounds.height / 2.0)
+                // Isometry3::translation(
+                //     bounds.x,
+                //     terrain_position[1],
+                //     bounds.z,
+                // )
+            }
+            _ => Isometry3::translation(
+                terrain_position[0],
+                terrain_position[1],
+                terrain_position[2],
+            ),
+        };
 
-                let collider = ColliderBuilder::heightfield(heights.clone(), scaling)
-                    .friction(0.9)
-                    .restitution(0.1)
-                    // .position(isometry)
-                    // .translation(translation)
-                    .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
-                    .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
-                    .user_data(
-                        Uuid::from_str(&chunk_id)
-                            .expect("Couldn't extract uuid")
-                            .as_u128(),
-                    )
-                    .build();
+        let translation = match corner {
+            "top_left" => {
+                vector![-bounds.width, -220.0, -bounds.height]
+            }
+            "top_right" => {
+                vector![bounds.width, -220.0, -bounds.height]
+            }
+            "bottom_left" => {
+                vector![-bounds.width, -220.0, bounds.height]
+            }
+            "bottom_right" => {
+                vector![bounds.width, -220.0, bounds.height]
+            }
+            _ => {
+                vector![0.0, 0.0, 0.0]
+            }
+        };
 
-                // Send the completed collider back
-                sender.send((chunk_id, collider)).unwrap();
-            });
+        // println!(
+        //     "spawning collider {:?} {:?} {:?}",
+        //     isometry, bounds.width, bounds.height
+        // );
 
-            // Create the ground as a fixed rigid body
+        // Spawn the heavy computation in a separate thread
+        std::thread::spawn(move || {
+            // let collider = ColliderBuilder::trimesh(
+            //     vertices,
+            //     indices_clone
+            //         .chunks(3)
+            //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+            //         .collect::<Vec<[u32; 3]>>(),
+            // )
+            // .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
+            // .build();
 
-            println!(
-                "insert landscape rigidbody position {:?} {:?} {:?}",
-                depth, bounds, terrain_position
-            );
-
-            let rigid_time = Instant::now();
-
-            println!(
-                "Corner: {}, Final isometry: x={}, y={}, z={}",
-                corner, isometry.translation.x, isometry.translation.y, isometry.translation.z
-            );
-
-            let ground_rigid_body = RigidBodyBuilder::fixed()
-                .position(isometry)
+            let collider = ColliderBuilder::heightfield(heights.clone(), scaling)
+                .friction(0.9)
+                .restitution(0.1)
+                // .position(isometry)
                 // .translation(translation)
+                .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
+                .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
                 .user_data(
-                    Uuid::from_str(&mesh_id)
+                    Uuid::from_str(&chunk_id)
                         .expect("Couldn't extract uuid")
                         .as_u128(),
                 )
-                .sleeping(false)
                 .build();
 
-            let rigid_duration = rigid_time.elapsed();
-            // println!("  rigid_duration: {:?}", rigid_duration);
+            // Send the completed collider back
+            sender.send((chunk_id, collider)).unwrap();
+        });
 
-            TerrainMesh {
-                mesh_id,
-                vertex_buffer,
-                index_buffer,
-                index_count: indices.clone().len() as u32,
-                collider: None,
-                rigid_body: Some(ground_rigid_body),
-                depth,
-            }
-        } else {
-            println!("not addressing most physics");
+        // Create the ground as a fixed rigid body
 
-            let ground_rigid_body = RigidBodyBuilder::fixed()
-                .position(isometry)
-                // .translation(translation)
-                .user_data(
-                    Uuid::from_str(&mesh_id)
-                        .expect("Couldn't extract uuid")
-                        .as_u128(),
-                )
-                .sleeping(false)
-                .build();
+        // println!(
+        //     "insert landscape rigidbody position {:?} {:?} {:?}",
+        //     depth, bounds, terrain_position
+        // );
 
-            TerrainMesh {
-                mesh_id,
-                vertex_buffer,
-                index_buffer,
-                index_count: indices.clone().len() as u32,
-                collider: None,
-                rigid_body: Some(ground_rigid_body),
-                depth,
-            }
+        let rigid_time = Instant::now();
+
+        // println!(
+        //     "Corner: {}, Final isometry: x={}, y={}, z={}",
+        //     corner, isometry.translation.x, isometry.translation.y, isometry.translation.z
+        // );
+
+        let ground_rigid_body = RigidBodyBuilder::fixed()
+            .position(isometry)
+            // .translation(translation)
+            .user_data(
+                Uuid::from_str(&mesh_id)
+                    .expect("Couldn't extract uuid")
+                    .as_u128(),
+            )
+            .sleeping(false)
+            .build();
+
+        let rigid_duration = rigid_time.elapsed();
+        // println!("  rigid_duration: {:?}", rigid_duration);
+
+        TerrainMesh {
+            mesh_id,
+            vertex_buffer,
+            index_buffer,
+            index_count: indices.clone().len() as u32,
+            collider: None,
+            rigid_body: Some(ground_rigid_body),
+            depth,
         }
+        // } else {
+        //     // println!("not addressing most physics");
+
+        //     let ground_rigid_body = RigidBodyBuilder::fixed()
+        //         .position(isometry)
+        //         // .translation(translation)
+        //         .user_data(
+        //             Uuid::from_str(&mesh_id)
+        //                 .expect("Couldn't extract uuid")
+        //                 .as_u128(),
+        //         )
+        //         .sleeping(false)
+        //         .build();
+
+        //     TerrainMesh {
+        //         mesh_id,
+        //         vertex_buffer,
+        //         index_buffer,
+        //         index_count: indices.clone().len() as u32,
+        //         collider: None,
+        //         rigid_body: Some(ground_rigid_body),
+        //         depth,
+        //     }
+        // }
     }
 }
 

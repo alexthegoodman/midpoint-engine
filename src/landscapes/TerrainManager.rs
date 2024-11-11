@@ -113,6 +113,8 @@ impl TerrainManager {
             label: None,
         });
 
+        println!("lod_distances {:?}", calculate_lod_distances());
+
         Self {
             id: landscapeComponentId.clone(),
             terrain_position,
@@ -211,7 +213,7 @@ impl TerrainManager {
             if let Some(chunk) = self.find_chunk_by_id(&chunk_id) {
                 // Add collider to chunk's mesh
                 if let Some(ref mut mesh) = chunk.mesh {
-                    println!("attaching collider {:?}", mesh.mesh_id);
+                    // println!("attaching collider {:?}", mesh.mesh_id);
                     // mesh.collider = Some(collider);
                     // Now you can add it to physics world if needed
                     if (chunk.children.is_none()) {
@@ -233,7 +235,7 @@ impl TerrainManager {
 
             let lod_distances = calculate_lod_distances();
 
-            println!("update lods? {:?} {:?}", lod_distances, camera_pos);
+            // println!("update lods? {:?} {:?}", lod_distances, camera_pos);
 
             // Update LOD structure
             let lod_changed = self.root.update_lod(
@@ -248,7 +250,7 @@ impl TerrainManager {
             );
 
             let update_duration = update_time.elapsed();
-            println!("  update_duration: {:?}", update_duration);
+            // println!("  update_duration: {:?}", update_duration);
             let physics_time = Instant::now();
 
             // Only update physics if LOD changed
@@ -268,14 +270,14 @@ impl TerrainManager {
             self.lod_update_timer = 0.0;
 
             let physics_duration = physics_time.elapsed();
-            println!("  physics_duration: {:?}", physics_duration);
+            // println!("  physics_duration: {:?}", physics_duration);
 
-            println!(
-                "get_active_physics_count {:?} {:?} {:?}",
-                self.get_active_physics_count(),
-                rigid_body_set.len(),
-                collider_set.len()
-            );
+            // println!(
+            //     "get_active_physics_count {:?} {:?} {:?}",
+            //     self.get_active_physics_count(),
+            //     rigid_body_set.len(),
+            //     collider_set.len()
+            // );
         }
     }
 
@@ -314,9 +316,9 @@ impl TerrainManager {
             let mut bodies = node.rigid_body_handle.is_some() as usize;
             let mut colliders = node.collider_handle.is_some() as usize;
 
-            if colliders > 0 {
-                println!("match depth {}", depth);
-            }
+            // if colliders > 0 {
+            //     println!("match depth {}", depth);
+            // }
 
             let mut max_depth = depth;
             if let Some(ref children) = node.children {
@@ -332,7 +334,7 @@ impl TerrainManager {
         }
 
         let (bodies, colliders, max_depth) = count_physics(&self.root, 0);
-        println!("Max depth reached: {}", max_depth);
+        // println!("Max depth reached: {}", max_depth);
         (bodies, colliders)
     }
 

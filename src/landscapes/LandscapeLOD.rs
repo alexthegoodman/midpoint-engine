@@ -30,7 +30,7 @@ pub struct Rect {
 
 pub const PHYSICS_DISTANCE: f32 = 1000.0;
 // Constants for LOD configuration
-pub const MAX_LOD_LEVELS: usize = 4;
+pub const MAX_LOD_LEVELS: usize = 6;
 pub const BASE_LOD_DISTANCE: f32 = 1000.0; // Distance for first LOD transition
 pub const LOD_DISTANCE_MULTIPLIER: f32 = 0.5; // Each level shows more detail at half the distance
 
@@ -378,9 +378,9 @@ pub fn create_debug_collision_mesh(
         // }
 
         // Debug print the heightfield properties
-        println!("Heightfield properties:");
-        println!("  Scale: {:?}", shape.scale());
-        println!("  Dimensions: {} x {}", shape.nrows(), shape.ncols());
+        // println!("Heightfield properties:");
+        // println!("  Scale: {:?}", shape.scale());
+        // println!("  Dimensions: {} x {}", shape.nrows(), shape.ncols());
 
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
@@ -393,13 +393,13 @@ pub fn create_debug_collision_mesh(
             rng.gen_range(0.0..1.0), // V
         ];
 
-        println!("Generated random UV coordinates for color: {:?}", random_uv);
+        // println!("Generated random UV coordinates for color: {:?}", random_uv);
 
-        // Print some height values from the heightfield directly
-        println!("Raw height samples:");
-        for i in 0..3 {
-            println!("  Height at {}: {}", i, shape.heights()[i]);
-        }
+        // // Print some height values from the heightfield directly
+        // println!("Raw height samples:");
+        // for i in 0..3 {
+        //     println!("  Height at {}: {}", i, shape.heights()[i]);
+        // }
 
         // Get triangles and build vertex/index buffers
         let triangles = shape.triangles();
@@ -413,12 +413,12 @@ pub fn create_debug_collision_mesh(
             min_y = min_y.min(triangle.a.y).min(triangle.b.y).min(triangle.c.y);
             max_y = max_y.max(triangle.a.y).max(triangle.b.y).max(triangle.c.y);
 
-            if vertex_index < 3 {
-                println!("Triangle {}:", vertex_index / 3);
-                println!("  A: {:?}", triangle.a);
-                println!("  B: {:?}", triangle.b);
-                println!("  C: {:?}", triangle.c);
-            }
+            // if vertex_index < 3 {
+            //     println!("Triangle {}:", vertex_index / 3);
+            //     println!("  A: {:?}", triangle.a);
+            //     println!("  B: {:?}", triangle.b);
+            //     println!("  C: {:?}", triangle.c);
+            // }
 
             let tri_a = position * triangle.a;
             let tri_b = position * triangle.b;
@@ -456,14 +456,14 @@ pub fn create_debug_collision_mesh(
             vertex_index += 3;
         }
 
-        println!("Height range in debug mesh:");
-        println!("  Min Y: {}", min_y);
-        println!("  Max Y: {}", max_y);
-        println!("  Variation: {}", max_y - min_y);
+        // println!("Height range in debug mesh:");
+        // println!("  Min Y: {}", min_y);
+        // println!("  Max Y: {}", max_y);
+        // println!("  Variation: {}", max_y - min_y);
 
-        println!("Debug mesh stats:");
-        println!("  Vertices: {}", vertices.len());
-        println!("  Indices: {}", indices.len());
+        // println!("Debug mesh stats:");
+        // println!("  Vertices: {}", vertices.len());
+        // println!("  Indices: {}", indices.len());
 
         // Create vertex buffer
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

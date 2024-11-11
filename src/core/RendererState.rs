@@ -397,7 +397,7 @@ impl RendererState {
         );
 
         let step_duration = step_time.elapsed();
-        println!("  step_duration: {:?}", step_duration);
+        // println!("  step_duration: {:?}", step_duration);
 
         let physics_update_time = Instant::now();
 
@@ -416,10 +416,10 @@ impl RendererState {
             .collect();
 
         let physics_update_duration = physics_update_time.elapsed();
-        println!(
-            "  physics_update collect _duration: {:?}",
-            physics_update_duration
-        );
+        // println!(
+        //     "  physics_update collect _duration: {:?}",
+        //     physics_update_duration
+        // );
 
         let physics_update_time = Instant::now();
 
@@ -490,7 +490,7 @@ impl RendererState {
         }
 
         let physics_update_duration = physics_update_time.elapsed();
-        println!("  physics_update_duration: {:?}", physics_update_duration);
+        // println!("  physics_update_duration: {:?}", physics_update_duration);
     }
 
     // Usage in your main update/render loop:
@@ -843,68 +843,49 @@ impl RendererState {
                 .get_mut(0)
                 .expect("Couldn't get first terrain manager");
 
-            // debug:
-            if let Some(rb_handle) = self.player_character.movement_rigid_body_handle {
-                if let Some(rb) = self.rigid_body_set.get(rb_handle) {
-                    let character_pos = rb.position();
+            // keep for debugging:
+            // if let Some(rb_handle) = self.player_character.movement_rigid_body_handle {
+            //     if let Some(rb) = self.rigid_body_set.get(rb_handle) {
+            //         let character_pos = rb.position();
 
-                    // let camera = get_camera();
-                    // let character_pos = camera.position;
+            //         // let camera = get_camera();
+            //         // let character_pos = camera.position;
 
-                    // Cast slightly above character's feet
-                    let ray_start = character_pos * Point3::new(0.0, 0.1, 0.0);
-                    let ray_dir = Vector3::new(0.0, -1.0, 0.0);
+            //         // Cast slightly above character's feet
+            //         let ray_start = character_pos * Point3::new(0.0, 0.1, 0.0);
+            //         let ray_dir = Vector3::new(0.0, -1.0, 0.0);
 
-                    // let ray_start = character_pos + Vector3::new(0.0, 0.1, 0.0); // Add a vector to offset the point
-                    // let ray_dir = Vector3::new(0.0, -1.0, 0.0);
+            //         let collider_handle = find_first_collider_handle(&terrain_manager.root);
 
-                    // Safely traverse the tree to get the collider handle
-                    // let collider_handle = terrain_manager
-                    //     .root
-                    //     .children
-                    //     .as_ref()
-                    //     .and_then(|children| children.get(0))
-                    //     .and_then(|node| node.children.as_ref())
-                    //     .and_then(|children| children.get(0))
-                    //     .and_then(|node| node.children.as_ref())
-                    //     .and_then(|children| children.get(0))
-                    //     .and_then(|node| node.children.as_ref())
-                    //     .and_then(|children| children.get(0))
-                    //     .and_then(|node| node.children.as_ref())
-                    //     .and_then(|children| children.get(0))
-                    //     .and_then(|node| node.collider_handle);
+            //         println!(
+            //             "Check collider handle {:?} {:?}",
+            //             character_pos,
+            //             collider_handle.is_some()
+            //         );
 
-                    let collider_handle = find_first_collider_handle(&terrain_manager.root);
+            //         if let Some(handle) = collider_handle {
+            //             // Use QueryPipeline for ray casting
+            //             let hit = self.query_pipeline.cast_ray(
+            //                 &self.rigid_body_set,
+            //                 &self.collider_set,
+            //                 &Ray::new(ray_start, ray_dir),
+            //                 f32::MAX,
+            //                 true,
+            //                 QueryFilter::default().exclude_rigid_body(rb_handle), // Exclude the character's own collider
+            //             );
 
-                    println!(
-                        "Check collider handle {:?} {:?}",
-                        character_pos,
-                        collider_handle.is_some()
-                    );
-
-                    if let Some(handle) = collider_handle {
-                        // Use QueryPipeline for ray casting
-                        let hit = self.query_pipeline.cast_ray(
-                            &self.rigid_body_set,
-                            &self.collider_set,
-                            &Ray::new(ray_start, ray_dir),
-                            f32::MAX,
-                            true,
-                            QueryFilter::default().exclude_rigid_body(rb_handle), // Exclude the character's own collider
-                        );
-
-                        if let Some((_, intersection)) = hit {
-                            let hit_point: nalgebra::OPoint<f32, nalgebra::Const<3>> =
-                                ray_start + ray_dir * intersection;
-                            println!("Ground intersection at: {:?}", hit_point);
-                            println!("Character position: {:?}", character_pos);
-                            println!("Distance to ground: {:?}", intersection);
-                        } else {
-                            println!("no intersect!");
-                        }
-                    }
-                }
-            }
+            //             if let Some((_, intersection)) = hit {
+            //                 let hit_point: nalgebra::OPoint<f32, nalgebra::Const<3>> =
+            //                     ray_start + ray_dir * intersection;
+            //                 println!("Ground intersection at: {:?}", hit_point);
+            //                 println!("Character position: {:?}", character_pos);
+            //                 println!("Distance to ground: {:?}", intersection);
+            //             } else {
+            //                 println!("no intersect!");
+            //             }
+            //         }
+            //     }
+            // }
 
             terrain_manager.update(
                 [camera.position.x, camera.position.y, camera.position.z],
