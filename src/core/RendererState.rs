@@ -10,7 +10,7 @@ use wgpu::BindGroupLayout;
 use crate::animations::render_skeleton::SkeletonRenderPart;
 use crate::animations::skeleton::Joint;
 use crate::handlers::get_camera;
-use crate::landscapes::LandscapeLOD::TerrainManager;
+use crate::landscapes::TerrainManager::TerrainManager;
 use crate::{
     core::Texture::Texture,
     helpers::saved_data::{ComponentData, ComponentKind},
