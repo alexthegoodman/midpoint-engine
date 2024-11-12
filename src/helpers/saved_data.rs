@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::animations::{
-    motion_path::MotionPath,
+    motion_path::SkeletonMotionPath,
     skeleton::{SkeletonAssemblyConfig, SkeletonPart},
 };
 
@@ -82,5 +82,5 @@ pub struct SavedState {
     pub levels: Option<Vec<LevelData>>,
     pub skeleton_parts: Vec<SkeletonPart>,
     pub skeletons: Vec<SkeletonAssemblyConfig>,
-    pub motion_paths: Vec<MotionPath>,
+    pub motion_paths: Vec<SkeletonMotionPath>,
 }
