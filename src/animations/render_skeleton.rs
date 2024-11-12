@@ -237,46 +237,6 @@ impl BoneSegment {
         Vector3::new(euler.0, euler.1, euler.2)
     }
 
-    // fn calculate_bone_rotation(bone_vector: &Vector3<f32>) -> Vector3<f32> {
-    //     // Default bone direction (assuming bone model points up along Y axis)
-    //     let default_direction = Vector3::new(0.0, 1.0, 0.0);
-
-    //     // If bone vector is zero or nearly zero, return no rotation
-    //     if bone_vector.magnitude() < 1e-6 {
-    //         return Vector3::zeros();
-    //     }
-
-    //     // Get unit vector in bone direction
-    //     let bone_direction = bone_vector.normalize();
-
-    //     // First calculate the axis of rotation (cross product)
-    //     let rotation_axis = default_direction.cross(&bone_direction);
-
-    //     if rotation_axis.magnitude() < 1e-6 {
-    //         // Vectors are parallel or anti-parallel
-    //         if bone_direction.dot(&default_direction) < 0.0 {
-    //             // Anti-parallel case - rotate 180 degrees around X axis
-    //             return Vector3::new(std::f32::consts::PI, 0.0, 0.0);
-    //         } else {
-    //             // Parallel case - no rotation needed
-    //             return Vector3::zeros();
-    //         }
-    //     }
-
-    //     // Calculate the angle between vectors
-    //     let angle = default_direction.dot(&bone_direction).acos();
-
-    //     // Create rotation around the axis
-    //     let axis_angle = rotation_axis.normalize() * angle;
-
-    //     // Convert to euler angles - this might give more stable results
-    //     let rotation =
-    //         Rotation3::from_axis_angle(&UnitVector3::new_normalize(rotation_axis), angle);
-    //     let euler = rotation.euler_angles();
-
-    //     Vector3::new(euler.0, euler.1, euler.2)
-    // }
-
     fn calculate_bone_rotation(
         bone_vector: &Vector3<f32>,
         parent_rotation: Option<Vector3<f32>>,

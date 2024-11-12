@@ -7,6 +7,7 @@ use rapier3d::prelude::{ColliderSet, QueryPipeline, RigidBodySet};
 use uuid::Uuid;
 use wgpu::BindGroupLayout;
 
+use crate::animations::motion_path::{update_skeleton_animation, AnimationPlayback};
 use crate::animations::render_skeleton::SkeletonRenderPart;
 use crate::animations::skeleton::Joint;
 use crate::handlers::get_camera;
@@ -97,6 +98,9 @@ pub struct RendererState {
     // pub landscapes: Vec<Landscape>,
     pub skeleton_parts: Vec<SkeletonRenderPart>, // will contain buffers and the like
     pub terrain_managers: Vec<TerrainManager>,
+
+    // animations
+    pub active_animations: Vec<AnimationPlayback>,
 
     // wgpu
     pub model_bind_group_layout: Arc<wgpu::BindGroupLayout>,
@@ -293,6 +297,7 @@ impl RendererState {
             // landscapes,
             skeleton_parts,
             terrain_managers,
+            active_animations: Vec::new(),
 
             // device,
             // queue,
@@ -348,6 +353,12 @@ impl RendererState {
             npcs: Vec::new(),
             gizmo_drag_axis: None,
             navigation_speed: 5.0,
+        }
+    }
+
+    pub fn step_animations_pipeline(&mut self, queue: &wgpu::Queue) {
+        for animation in &mut self.active_animations {
+            update_skeleton_animation(&mut self.skeleton_parts, animation, queue);
         }
     }
 
