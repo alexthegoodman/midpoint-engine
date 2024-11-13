@@ -203,11 +203,11 @@ pub struct SkeletonBlendMask {
 }
 
 use crate::animations::render_skeleton::SkeletonRenderPart;
-use nalgebra::{Point3, UnitQuaternion, Vector3};
+use nalgebra::{Point3, Quaternion, UnitQuaternion, Vector3};
 use std::time::Instant;
 use uuid::Uuid;
 
-use super::render_skeleton::BoneSegment;
+use super::{render_skeleton::BoneSegment, skeleton::PartConnection};
 
 /// Tracks the playback state of an animation
 pub struct AnimationPlayback {
@@ -407,6 +407,97 @@ impl AnimationPlayback {
     }
 }
 
+// pub fn update_skeleton_animation(
+//     render_parts: &mut Vec<SkeletonRenderPart>,
+//     animation: &mut AnimationPlayback,
+//     queue: &wgpu::Queue,
+// ) {
+//     let joint_transforms = animation.update();
+
+//     // First, collect all the IK transforms we need to process
+//     let ik_transforms: Vec<(String, (Point3<f32>, UnitQuaternion<f32>))> = joint_transforms
+//         .iter()
+//         .filter(|(id, _)| id.ends_with("_ik"))
+//         .map(|(id, transform)| (id.clone(), *transform))
+//         .collect();
+
+//     // Process each render part separately
+//     for part in render_parts {
+//         let mut ik_bone_transforms = HashMap::new();
+
+//         // Calculate all IK positions for this part
+//         for (transform_id, transform) in &ik_transforms {
+//             // Find chain bones within this part only
+//             let chain_bones: Vec<&BoneSegment> = part
+//                 .bones
+//                 .iter()
+//                 .filter(|bone| {
+//                     bone.ik_chain_id
+//                         .as_ref()
+//                         .map_or(false, |id| id == transform_id)
+//                 })
+//                 .collect();
+
+//             if !chain_bones.is_empty() {
+//                 // Build ordered list of joints
+//                 let mut ordered_joints = Vec::new();
+//                 let mut joint_lengths = Vec::new();
+//                 let mut current_joint_id = chain_bones[0].start_joint_id.clone();
+//                 let start_position =
+//                     Point3::from(part.joint_positions[&chain_bones[0].start_joint_id].coords);
+
+//                 // Build chain info from just this part's bones
+//                 while let Some(bone) = chain_bones
+//                     .iter()
+//                     .find(|b| b.start_joint_id == current_joint_id)
+//                 {
+//                     ordered_joints.push(current_joint_id.clone());
+//                     joint_lengths.push(bone.length);
+//                     current_joint_id = bone.end_joint_id.clone();
+//                 }
+//                 ordered_joints.push(current_joint_id);
+
+//                 // Solve IK
+//                 let solved_positions = solve_ik_chain(
+//                     start_position,
+//                     transform.0, // IK target position
+//                     None,        // pole position (we can add this later)
+//                     &joint_lengths,
+//                 );
+
+//                 // Apply solved positions
+//                 for (joint_id, position) in ordered_joints.iter().zip(solved_positions.iter()) {
+//                     ik_bone_transforms.insert(joint_id.clone(), (*position, transform.1));
+//                 }
+//             }
+//         }
+
+//         // Update bones with the calculated transforms
+//         for bone in &mut part.bones {
+//             if let (Some((start_pos, start_rot)), Some((end_pos, end_rot))) = (
+//                 ik_bone_transforms
+//                     .get(&bone.start_joint_id)
+//                     .or_else(|| joint_transforms.get(&bone.start_joint_id)),
+//                 ik_bone_transforms
+//                     .get(&bone.end_joint_id)
+//                     .or_else(|| joint_transforms.get(&bone.end_joint_id)),
+//             ) {
+//                 let euler = start_rot.euler_angles();
+
+//                 bone.update_from_joint_positions(
+//                     *start_pos,
+//                     *end_pos,
+//                     Some(Vector3::new(euler.0, euler.1, euler.2)),
+//                 );
+
+//                 bone.transform.update_uniform_buffer(queue);
+//                 bone.joint_sphere.transform.position = start_pos.coords;
+//                 bone.joint_sphere.transform.update_uniform_buffer(queue);
+//             }
+//         }
+//     }
+// }
+
 pub fn update_skeleton_animation(
     render_parts: &mut Vec<SkeletonRenderPart>,
     animation: &mut AnimationPlayback,
@@ -421,12 +512,23 @@ pub fn update_skeleton_animation(
         .map(|(id, transform)| (id.clone(), *transform))
         .collect();
 
+    // println!("\n--- Animation Frame ---");
+    // println!("Received joint transforms: {:#?}", joint_transforms);
+
     // Process each render part separately
     for part in render_parts {
+        // println!("\nProcessing part: {}", part.skeleton_part_id);
+        // println!("Current joint positions: {:#?}", part.joint_positions);
+
         let mut ik_bone_transforms = HashMap::new();
 
-        // Calculate all IK positions for this part
-        for (transform_id, transform) in &ik_transforms {
+        // First get the part's attachment transform if it exists
+        let part_transform = &part.attachment_transform;
+
+        for (transform_id, (target_pos, target_rot)) in &ik_transforms {
+            // println!("\nProcessing IK chain: {}", transform_id);
+            // println!("Target transform: {:?} {:?}", target_pos, target_rot);
+
             // Find chain bones within this part only
             let chain_bones: Vec<&BoneSegment> = part
                 .bones
@@ -438,15 +540,31 @@ pub fn update_skeleton_animation(
                 })
                 .collect();
 
+            // println!(
+            //     "Found chain bones: {:?}",
+            //     chain_bones
+            //         .iter()
+            //         .map(|b| (&b.start_joint_id, &b.end_joint_id))
+            //         .collect::<Vec<_>>()
+            // );
+
             if !chain_bones.is_empty() {
+                // Get the start bone of the chain
+                let start_bone = chain_bones[0];
+
+                // Convert the IK target position from world space to part-local space
+                let local_target_pos = part_transform.inverse_transform_point(target_pos);
+
+                // Get the start position in part-local space
+                // This should already be in part-local space since it's stored relative to the attachment
+                let local_start_pos =
+                    Point3::from(part.joint_positions[&start_bone.start_joint_id].coords);
+
                 // Build ordered list of joints
                 let mut ordered_joints = Vec::new();
                 let mut joint_lengths = Vec::new();
-                let mut current_joint_id = chain_bones[0].start_joint_id.clone();
-                let start_position =
-                    Point3::from(part.joint_positions[&chain_bones[0].start_joint_id].coords);
+                let mut current_joint_id = start_bone.start_joint_id.clone();
 
-                // Build chain info from just this part's bones
                 while let Some(bone) = chain_bones
                     .iter()
                     .find(|b| b.start_joint_id == current_joint_id)
@@ -457,17 +575,22 @@ pub fn update_skeleton_animation(
                 }
                 ordered_joints.push(current_joint_id);
 
-                // Solve IK
-                let solved_positions = solve_ik_chain(
-                    start_position,
-                    transform.0, // IK target position
-                    None,        // pole position (we can add this later)
+                // Solve IK in part-local space
+                let local_solved_positions = solve_ik_chain(
+                    local_start_pos,
+                    local_target_pos,
+                    None, // pole position (we can add this later)
                     &joint_lengths,
                 );
 
-                // Apply solved positions
-                for (joint_id, position) in ordered_joints.iter().zip(solved_positions.iter()) {
-                    ik_bone_transforms.insert(joint_id.clone(), (*position, transform.1));
+                // Convert solved positions back to world space and store
+                for (joint_id, local_pos) in
+                    ordered_joints.iter().zip(local_solved_positions.iter())
+                {
+                    let world_pos = part_transform.transform_point(local_pos);
+                    // Transform the rotation by the part's attachment rotation
+                    let world_rot = part_transform.rotation * target_rot;
+                    ik_bone_transforms.insert(joint_id.clone(), (world_pos, world_rot));
                 }
             }
         }
@@ -484,11 +607,14 @@ pub fn update_skeleton_animation(
             ) {
                 let euler = start_rot.euler_angles();
 
-                bone.update_from_joint_positions(
-                    *start_pos,
-                    *end_pos,
-                    Some(Vector3::new(euler.0, euler.1, euler.2)),
+                // Convert from radians to degrees since the skeleton uses degrees
+                let degrees = Vector3::new(
+                    euler.0.to_degrees(),
+                    euler.1.to_degrees(),
+                    euler.2.to_degrees(),
                 );
+
+                bone.update_from_joint_positions(*start_pos, *end_pos, Some(degrees));
 
                 bone.transform.update_uniform_buffer(queue);
                 bone.joint_sphere.transform.position = start_pos.coords;
@@ -497,6 +623,61 @@ pub fn update_skeleton_animation(
         }
     }
 }
+
+// Define a transform type for handling part attachment transforms
+#[derive(Clone, Debug)]
+pub struct AttachmentTransform {
+    pub position: Point3<f32>,
+    pub rotation: UnitQuaternion<f32>,
+    pub scale: Vector3<f32>,
+}
+
+impl AttachmentTransform {
+    pub fn new(position: Point3<f32>, rotation: UnitQuaternion<f32>, scale: Vector3<f32>) -> Self {
+        Self {
+            position,
+            rotation,
+            scale,
+        }
+    }
+
+    pub fn transform_point(&self, point: &Point3<f32>) -> Point3<f32> {
+        let scaled = point.coords.component_mul(&self.scale);
+        let rotated = self.rotation * scaled;
+        Point3::from(rotated + self.position.coords)
+    }
+
+    pub fn inverse_transform_point(&self, point: &Point3<f32>) -> Point3<f32> {
+        let translated = point - self.position.coords;
+        let unrotated = self.rotation.inverse() * translated;
+        // Point3::from(unrotated.component_div(&self.scale))
+        Point3::from(unrotated.coords.component_div(&self.scale))
+    }
+}
+
+// Function to create the attachment transform from your PartConnection data
+pub fn create_attachment_transform(connection: &PartConnection) -> AttachmentTransform {
+    if let Some(transform_offset) = &connection.transform_offset {
+        AttachmentTransform::new(
+            Point3::from(transform_offset.position),
+            UnitQuaternion::from_quaternion(Quaternion::new(
+                transform_offset.rotation[3],
+                transform_offset.rotation[0],
+                transform_offset.rotation[1],
+                transform_offset.rotation[2],
+            )),
+            Vector3::from(transform_offset.scale),
+        )
+    } else {
+        // Default transform if none specified
+        AttachmentTransform::new(
+            Point3::origin(),
+            UnitQuaternion::identity(),
+            Vector3::new(1.0, 1.0, 1.0),
+        )
+    }
+}
+
 /// Stores information needed for IK solving
 struct IKChainInfo {
     start_position: Point3<f32>,
@@ -578,6 +759,7 @@ fn get_joint_lengths(parts: &[SkeletonRenderPart], chain_info: &IKChainInfo) -> 
 }
 
 /// Calculate intermediate joint positions for an IK chain
+/// includes safety checks for bad values
 fn solve_ik_chain(
     start_pos: Point3<f32>,
     target_pos: Point3<f32>,
@@ -587,15 +769,47 @@ fn solve_ik_chain(
     let mut positions = Vec::new();
     positions.push(start_pos);
 
-    // For a basic 2-bone IK (like arm or leg):
-    if joint_lengths.len() == 2 {
-        let total_length: f32 = joint_lengths.iter().sum();
-        let target_vec = target_pos - start_pos;
-        let target_dist = target_vec.magnitude();
+    // Validate joint lengths
+    if joint_lengths.is_empty() {
+        println!("Warning: No joint lengths provided");
+        return positions;
+    }
 
+    for (i, &length) in joint_lengths.iter().enumerate() {
+        if !length.is_finite() || length <= 0.0 {
+            println!("Warning: Invalid joint length at index {}: {}", i, length);
+            return positions;
+        }
+    }
+
+    let total_length: f32 = joint_lengths.iter().sum();
+    let target_vec = target_pos - start_pos;
+    let target_dist = target_vec.magnitude();
+
+    println!(
+        "Target distance: {}, Total chain length: {}",
+        target_dist, total_length
+    );
+
+    // Handle case where target is at or very close to start
+    if target_dist < 0.0001 {
+        println!("Target too close to start, using rest pose");
+        // Use rest pose (straight up or last valid position)
+        let default_dir = Vector3::new(0.0, 1.0, 0.0);
+        for &length in joint_lengths {
+            let next_pos = positions.last().unwrap() + default_dir * length;
+            positions.push(Point3::from(next_pos));
+        }
+        return positions;
+    }
+
+    // For a 2-bone IK chain (like an arm or leg)
+    if joint_lengths.len() == 2 {
         // If target is too far, stretch towards it
-        if target_dist > total_length {
-            let dir = target_vec.normalize();
+        let dir = target_vec.normalize();
+
+        if target_dist >= total_length {
+            println!("Target beyond reach, stretching");
             // Place middle joint along the line to target
             let mid_pos = start_pos + dir * joint_lengths[0];
             positions.push(mid_pos);
@@ -606,27 +820,73 @@ fn solve_ik_chain(
             let b = joint_lengths[1];
             let c = target_dist;
 
-            // Find angle using cosine law
-            let cos_angle = (a * a + c * c - b * b) / (2.0 * a * c);
-            let angle = cos_angle.clamp(-1.0, 1.0).acos();
+            // Find angle using cosine law with safety checks
+            let cos_angle = ((a * a + c * c - b * b) / (2.0 * a * c)).clamp(-1.0, 1.0);
+            let angle = cos_angle.acos();
 
-            // Find middle joint position
-            let dir = target_vec.normalize();
+            // Use pole vector for rotation plane
             let pole_dir = if let Some(pole) = pole_pos {
-                (pole - start_pos).normalize()
+                let pole_vec = pole - start_pos;
+                if pole_vec.magnitude() < 0.0001 {
+                    Vector3::new(0.0, 1.0, 0.0)
+                } else {
+                    pole_vec.normalize()
+                }
             } else {
-                // Default up vector if no pole
                 Vector3::new(0.0, 1.0, 0.0)
             };
 
-            // Create rotation basis
-            let right = dir.cross(&pole_dir).normalize();
+            // Create rotation basis with safety checks
+            let right = dir.cross(&pole_dir);
+            let right = if right.magnitude() < 0.0001 {
+                Vector3::new(1.0, 0.0, 0.0)
+            } else {
+                right.normalize()
+            };
+
             let up = right.cross(&dir).normalize();
 
             // Place middle joint
             let mid_pos = start_pos + dir * (cos_angle * a) + up * (angle.sin() * a);
-            positions.push(mid_pos);
-            positions.push(target_pos);
+
+            // Verify mid_pos is valid
+            if mid_pos.coords.iter().all(|x| x.is_finite()) {
+                positions.push(mid_pos);
+                positions.push(target_pos);
+            } else {
+                println!("Warning: Invalid mid position calculated");
+                // Fall back to simple linear interpolation
+                let mid_pos = start_pos + dir * joint_lengths[0];
+                positions.push(mid_pos);
+                positions.push(target_pos);
+            }
+        }
+    } else {
+        // For chains with different numbers of bones,
+        // distribute joints evenly along path
+        let dir = target_vec.normalize();
+        let mut current_pos = start_pos;
+
+        for &length in joint_lengths {
+            current_pos = Point3::from(current_pos + dir * length);
+            positions.push(current_pos);
+        }
+    }
+
+    println!("Solved joint positions: {:?}", positions);
+
+    // Final validation
+    if positions
+        .iter()
+        .any(|p| p.coords.iter().any(|x| !x.is_finite()))
+    {
+        println!("Warning: NaN detected in final positions, using fallback");
+        positions.clear();
+        positions.push(start_pos);
+        let default_dir = Vector3::new(0.0, 1.0, 0.0);
+        for &length in joint_lengths {
+            let next_pos = positions.last().unwrap() + default_dir * length;
+            positions.push(Point3::from(next_pos));
         }
     }
 

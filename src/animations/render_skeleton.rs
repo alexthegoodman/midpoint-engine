@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use nalgebra::{Matrix4, Point3, Rotation3, UnitVector3, Vector3};
+use nalgebra::{Matrix4, Point3, Rotation3, UnitQuaternion, UnitVector3, Vector3};
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -9,7 +9,10 @@ use crate::{
     shapes::Sphere::Sphere,
 };
 
-use super::skeleton::{IKChain, Joint, SkeletonPart};
+use super::{
+    motion_path::AttachmentTransform,
+    skeleton::{IKChain, Joint, SkeletonPart},
+};
 
 // // Vertices for a pyramid
 // const VERTICES: &[Vertex] = &[
@@ -297,6 +300,9 @@ pub struct SkeletonRenderPart {
     // Cache of computed data
     /// Current world space positions of joints
     pub joint_positions: HashMap<String, nalgebra::Point3<f32>>,
+
+    // temp transforms for calculations, not buffers
+    pub attachment_transform: AttachmentTransform,
 }
 
 impl SkeletonRenderPart {
@@ -305,6 +311,11 @@ impl SkeletonRenderPart {
             skeleton_part_id: part_id,
             bones: Vec::new(),
             joint_positions: HashMap::new(),
+            attachment_transform: AttachmentTransform::new(
+                Point3::origin(),
+                UnitQuaternion::identity(),
+                Vector3::new(1.0, 1.0, 1.0),
+            ),
         }
     }
 
