@@ -127,6 +127,7 @@ pub struct BoneSegment {
     pub ik_chain_id: Option<String>,
     /// Whether this bone is an end effector for its IK chain
     pub is_ik_end_effector: bool,
+    pub end_joint_original_offset: Vector3<f32>,
 }
 
 impl BoneSegment {
@@ -205,6 +206,7 @@ impl BoneSegment {
             joint_sphere,
             ik_chain_id,
             is_ik_end_effector,
+            end_joint_original_offset: bone_vector,
         }
     }
 
