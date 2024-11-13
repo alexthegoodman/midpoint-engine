@@ -4,6 +4,7 @@ use nalgebra::{Matrix4, Point3, Rotation3, UnitQuaternion, UnitVector3, Vector3}
 use wgpu::util::DeviceExt;
 
 use crate::{
+    animations::motion_path::create_attachment_transform,
     core::Transform::{matrix4_to_raw_array, Transform},
     handlers::Vertex,
     shapes::Sphere::Sphere,
@@ -11,7 +12,7 @@ use crate::{
 
 use super::{
     motion_path::AttachmentTransform,
-    skeleton::{IKChain, Joint, SkeletonPart},
+    skeleton::{IKChain, Joint, PartConnection, SkeletonPart},
 };
 
 // // Vertices for a pyramid
@@ -423,6 +424,7 @@ impl SkeletonRenderPart {
         ik_chains: Vec<IKChain>,
         joint_positions: &HashMap<String, Point3<f32>>,
         position: [f32; 3],
+        connection: Option<PartConnection>,
     ) {
         let mut bones = Vec::new();
 
@@ -491,6 +493,11 @@ impl SkeletonRenderPart {
                     bones.push(bone);
                 }
             }
+        }
+
+        if connection.is_some() {
+            self.attachment_transform =
+                create_attachment_transform(&connection.expect("Couldn't get connection"));
         }
 
         self.joint_positions = joint_positions.clone();

@@ -9,7 +9,7 @@ use wgpu::BindGroupLayout;
 
 use crate::animations::motion_path::{update_skeleton_animation, AnimationPlayback};
 use crate::animations::render_skeleton::SkeletonRenderPart;
-use crate::animations::skeleton::{IKChain, Joint};
+use crate::animations::skeleton::{IKChain, Joint, PartConnection};
 use crate::handlers::get_camera;
 use crate::landscapes::QuadNode::QuadNode;
 use crate::landscapes::TerrainManager::TerrainManager;
@@ -983,6 +983,7 @@ impl RendererState {
         ik_chains: Vec<IKChain>,
         joint_positions: &HashMap<String, Point3<f32>>,
         // joint_rotations: &HashMap<String, Vector3<f32>>,
+        connection: Option<PartConnection>,
     ) {
         let mut skeleton_part = SkeletonRenderPart::new(partComponentId.to_string());
         skeleton_part.create_bone_segments(
@@ -993,6 +994,7 @@ impl RendererState {
             joint_positions,
             // joint_rotations,
             position,
+            connection,
         );
 
         self.skeleton_parts.push(skeleton_part);

@@ -517,7 +517,10 @@ pub fn update_skeleton_animation(
 
     // Process each render part separately
     for part in render_parts {
-        // println!("\nProcessing part: {}", part.skeleton_part_id);
+        // println!(
+        //     "\nProcessing part: {} Attachment Transform: {:?}",
+        //     part.skeleton_part_id, part.attachment_transform
+        // );
         // println!("Current joint positions: {:#?}", part.joint_positions);
 
         let mut ik_bone_transforms = HashMap::new();
@@ -634,6 +637,14 @@ pub struct AttachmentTransform {
 
 impl AttachmentTransform {
     pub fn new(position: Point3<f32>, rotation: UnitQuaternion<f32>, scale: Vector3<f32>) -> Self {
+        // Validate rotation
+        let rotation = if !rotation.as_vector().iter().all(|x| x.is_finite()) {
+            println!("Warning: Invalid rotation in attachment transform, using identity");
+            UnitQuaternion::identity()
+        } else {
+            rotation
+        };
+
         Self {
             position,
             rotation,
@@ -658,14 +669,24 @@ impl AttachmentTransform {
 // Function to create the attachment transform from your PartConnection data
 pub fn create_attachment_transform(connection: &PartConnection) -> AttachmentTransform {
     if let Some(transform_offset) = &connection.transform_offset {
+        // Create quaternion from offset, ensuring it's valid (in case AI generation is innacurate)
+        let rotation = if transform_offset.rotation.iter().all(|&x| x == 0.0) {
+            // If all zeros, use identity quaternion instead
+            UnitQuaternion::identity()
+        } else {
+            // Otherwise normalize the quaternion
+            let quat = Quaternion::new(
+                transform_offset.rotation[3], // w component
+                transform_offset.rotation[0], // x component
+                transform_offset.rotation[1], // y component
+                transform_offset.rotation[2], // z component
+            );
+            UnitQuaternion::from_quaternion(quat.normalize())
+        };
+
         AttachmentTransform::new(
             Point3::from(transform_offset.position),
-            UnitQuaternion::from_quaternion(Quaternion::new(
-                transform_offset.rotation[3],
-                transform_offset.rotation[0],
-                transform_offset.rotation[1],
-                transform_offset.rotation[2],
-            )),
+            rotation,
             Vector3::from(transform_offset.scale),
         )
     } else {
@@ -786,10 +807,10 @@ fn solve_ik_chain(
     let target_vec = target_pos - start_pos;
     let target_dist = target_vec.magnitude();
 
-    println!(
-        "Target distance: {}, Total chain length: {}",
-        target_dist, total_length
-    );
+    // println!(
+    //     "Target distance: {}, Total chain length: {}",
+    //     target_dist, total_length
+    // );
 
     // Handle case where target is at or very close to start
     if target_dist < 0.0001 {
@@ -873,7 +894,7 @@ fn solve_ik_chain(
         }
     }
 
-    println!("Solved joint positions: {:?}", positions);
+    // println!("Solved joint positions: {:?}", positions);
 
     // Final validation
     if positions
