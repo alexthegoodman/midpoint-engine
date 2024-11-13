@@ -9,7 +9,7 @@ use wgpu::BindGroupLayout;
 
 use crate::animations::motion_path::{update_skeleton_animation, AnimationPlayback};
 use crate::animations::render_skeleton::SkeletonRenderPart;
-use crate::animations::skeleton::Joint;
+use crate::animations::skeleton::{IKChain, Joint};
 use crate::handlers::get_camera;
 use crate::landscapes::QuadNode::QuadNode;
 use crate::landscapes::TerrainManager::TerrainManager;
@@ -358,6 +358,7 @@ impl RendererState {
 
     pub fn step_animations_pipeline(&mut self, queue: &wgpu::Queue) {
         for animation in &mut self.active_animations {
+            // TODO: pass only relevant parts
             update_skeleton_animation(&mut self.skeleton_parts, animation, queue);
         }
     }
@@ -979,6 +980,7 @@ impl RendererState {
         partComponentId: &String,
         position: [f32; 3],
         joints: Vec<Joint>,
+        ik_chains: Vec<IKChain>,
         joint_positions: &HashMap<String, Point3<f32>>,
         // joint_rotations: &HashMap<String, Vector3<f32>>,
     ) {
@@ -987,6 +989,7 @@ impl RendererState {
             device,
             &self.model_bind_group_layout,
             joints,
+            ik_chains,
             joint_positions,
             // joint_rotations,
             position,

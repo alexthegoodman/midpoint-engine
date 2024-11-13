@@ -207,6 +207,8 @@ use nalgebra::{Point3, UnitQuaternion, Vector3};
 use std::time::Instant;
 use uuid::Uuid;
 
+use super::render_skeleton::BoneSegment;
+
 /// Tracks the playback state of an animation
 pub struct AnimationPlayback {
     /// Identifier to associate RendererState with animations
@@ -251,38 +253,24 @@ impl AnimationPlayback {
         self.start_time = Instant::now();
     }
 
-    /// Updates animation state and returns joint positions for the current frame
     pub fn update(&mut self) -> HashMap<String, (Point3<f32>, UnitQuaternion<f32>)> {
         if !self.is_playing {
             return HashMap::new();
         }
 
-        // // Update current time
-        // let elapsed = Instant::now().duration_since(self.start_time);
-        // self.current_time = Duration::from_secs_f32(
-        //     (elapsed.as_secs_f32() * self.speed_multiplier)
-        //         % self.active_motion_paths[0].duration.as_secs_f32(),
-        // );
-
         // Update current time
         let elapsed = Instant::now().duration_since(self.start_time);
         let raw_time = elapsed.as_secs_f32() * self.speed_multiplier;
-
         let duration = self.active_motion_paths[0].duration.as_secs_f32();
 
-        // Check if we should loop or stop
-        if raw_time >= duration {
-            if self.active_motion_paths[0].is_looping {
-                // Loop by using modulo
-                self.current_time = Duration::from_secs_f32(raw_time % duration);
-            } else {
-                // Stop at the end
-                self.is_playing = false;
-                self.current_time = Duration::from_secs_f32(duration);
-            }
+        // Handle looping
+        self.current_time = if self.active_motion_paths[0].is_looping {
+            Duration::from_secs_f32(raw_time % duration)
         } else {
-            self.current_time = Duration::from_secs_f32(raw_time);
-        }
+            Duration::from_secs_f32((raw_time).min(duration))
+        };
+
+        // println!("Current animation time: {:?}", self.current_time);
 
         // Calculate current joint positions and rotations
         let mut joint_transforms = HashMap::new();
@@ -306,22 +294,60 @@ impl AnimationPlayback {
         // Find the surrounding keyframes
         let mut prev_keyframe = &motion_path.keyframes[0];
         let mut next_keyframe = &motion_path.keyframes[0];
+        let mut found_frames = false;
+
+        // Debug log
+        // println!("Current time: {}", current_secs);
 
         for window in motion_path.keyframes.windows(2) {
             let start_time = window[0].base.time.as_secs_f32();
             let end_time = window[1].base.time.as_secs_f32();
 
+            // println!("Checking window: {} to {}", start_time, end_time);
+
             if current_secs >= start_time && current_secs <= end_time {
                 prev_keyframe = &window[0];
                 next_keyframe = &window[1];
+                found_frames = true;
                 break;
+            }
+        }
+
+        // If we didn't find frames, handle edge case
+        if !found_frames {
+            // Handle loop case - use last and first frame
+            if motion_path.is_looping {
+                prev_keyframe = motion_path.keyframes.last().unwrap();
+                next_keyframe = &motion_path.keyframes[0];
+            } else {
+                // Use last two frames
+                let last_idx = motion_path.keyframes.len() - 1;
+                prev_keyframe = &motion_path.keyframes[last_idx - 1];
+                next_keyframe = &motion_path.keyframes[last_idx];
             }
         }
 
         // Calculate interpolation factor
         let start_time = prev_keyframe.base.time.as_secs_f32();
         let end_time = next_keyframe.base.time.as_secs_f32();
-        let factor = (current_secs - start_time) / (end_time - start_time);
+
+        // Handle time wrapping for looping animations
+        let mut factor = if end_time > start_time {
+            (current_secs - start_time) / (end_time - start_time)
+        } else {
+            // Handle case where we're between last and first frame
+            let duration = motion_path.duration.as_secs_f32();
+            ((current_secs - start_time) + (duration - start_time))
+                / ((duration - start_time) + end_time)
+        };
+
+        // Clamp factor between 0 and 1 to prevent NaN
+        factor = factor.clamp(0.0, 1.0);
+
+        // println!(
+        //     "Interpolation factor: {} between times {} and {}",
+        //     factor, start_time, end_time
+        // );
 
         // Apply easing if specified
         let eased_factor = match prev_keyframe.base.easing {
@@ -332,11 +358,9 @@ impl AnimationPlayback {
         };
 
         // Interpolate position
-        let position = interpolate_vector3(
-            &prev_keyframe.base.position.into(),
-            &next_keyframe.base.position.into(),
-            eased_factor,
-        );
+        let prev_pos: Vector3<f32> = prev_keyframe.base.position.into();
+        let next_pos: Vector3<f32> = next_keyframe.base.position.into();
+        let position = interpolate_vector3(&prev_pos, &next_pos, eased_factor);
 
         // Interpolate rotation (using SLERP for quaternions)
         let rotation = interpolate_rotation(
@@ -344,6 +368,9 @@ impl AnimationPlayback {
             &next_keyframe.base.rotation,
             eased_factor,
         );
+
+        // println!("Interpolated position: {:?}", position);
+        // println!("Interpolated rotation: {:?}", rotation);
 
         // If we have IK targets, handle those
         if let (Some(prev_ik), Some(next_ik)) = (
@@ -380,42 +407,230 @@ impl AnimationPlayback {
     }
 }
 
-/// Updates skeleton render parts based on animation state
 pub fn update_skeleton_animation(
     render_parts: &mut Vec<SkeletonRenderPart>,
     animation: &mut AnimationPlayback,
     queue: &wgpu::Queue,
 ) {
-    // Get current frame transforms
     let joint_transforms = animation.update();
 
-    // Update each render part
+    // First, collect all the IK transforms we need to process
+    let ik_transforms: Vec<(String, (Point3<f32>, UnitQuaternion<f32>))> = joint_transforms
+        .iter()
+        .filter(|(id, _)| id.ends_with("_ik"))
+        .map(|(id, transform)| (id.clone(), *transform))
+        .collect();
+
+    // Process each render part separately
     for part in render_parts {
-        // Update bones based on new joint positions
+        let mut ik_bone_transforms = HashMap::new();
+
+        // Calculate all IK positions for this part
+        for (transform_id, transform) in &ik_transforms {
+            // Find chain bones within this part only
+            let chain_bones: Vec<&BoneSegment> = part
+                .bones
+                .iter()
+                .filter(|bone| {
+                    bone.ik_chain_id
+                        .as_ref()
+                        .map_or(false, |id| id == transform_id)
+                })
+                .collect();
+
+            if !chain_bones.is_empty() {
+                // Build ordered list of joints
+                let mut ordered_joints = Vec::new();
+                let mut joint_lengths = Vec::new();
+                let mut current_joint_id = chain_bones[0].start_joint_id.clone();
+                let start_position =
+                    Point3::from(part.joint_positions[&chain_bones[0].start_joint_id].coords);
+
+                // Build chain info from just this part's bones
+                while let Some(bone) = chain_bones
+                    .iter()
+                    .find(|b| b.start_joint_id == current_joint_id)
+                {
+                    ordered_joints.push(current_joint_id.clone());
+                    joint_lengths.push(bone.length);
+                    current_joint_id = bone.end_joint_id.clone();
+                }
+                ordered_joints.push(current_joint_id);
+
+                // Solve IK
+                let solved_positions = solve_ik_chain(
+                    start_position,
+                    transform.0, // IK target position
+                    None,        // pole position (we can add this later)
+                    &joint_lengths,
+                );
+
+                // Apply solved positions
+                for (joint_id, position) in ordered_joints.iter().zip(solved_positions.iter()) {
+                    ik_bone_transforms.insert(joint_id.clone(), (*position, transform.1));
+                }
+            }
+        }
+
+        // Update bones with the calculated transforms
         for bone in &mut part.bones {
             if let (Some((start_pos, start_rot)), Some((end_pos, end_rot))) = (
-                joint_transforms.get(&bone.start_joint_id),
-                joint_transforms.get(&bone.end_joint_id),
+                ik_bone_transforms
+                    .get(&bone.start_joint_id)
+                    .or_else(|| joint_transforms.get(&bone.start_joint_id)),
+                ik_bone_transforms
+                    .get(&bone.end_joint_id)
+                    .or_else(|| joint_transforms.get(&bone.end_joint_id)),
             ) {
-                // double check this
                 let euler = start_rot.euler_angles();
 
-                // Update bone transform
                 bone.update_from_joint_positions(
                     *start_pos,
                     *end_pos,
                     Some(Vector3::new(euler.0, euler.1, euler.2)),
                 );
 
-                // Update GPU buffer
                 bone.transform.update_uniform_buffer(queue);
-
-                // Update joint sphere position
                 bone.joint_sphere.transform.position = start_pos.coords;
                 bone.joint_sphere.transform.update_uniform_buffer(queue);
             }
         }
     }
+}
+/// Stores information needed for IK solving
+struct IKChainInfo {
+    start_position: Point3<f32>,
+    joint_ids: Vec<String>,
+    pole_position: Option<Point3<f32>>,
+}
+
+fn get_ik_chain(parts: &[SkeletonRenderPart], ik_chain_id: &str) -> Option<IKChainInfo> {
+    // First find the part containing this IK chain
+    for part in parts {
+        // Find bones that belong to this IK chain
+        let chain_bones: Vec<&BoneSegment> = part
+            .bones
+            .iter()
+            .filter(|bone| {
+                bone.ik_chain_id
+                    .as_ref()
+                    .map_or(false, |id| id == ik_chain_id)
+            })
+            .collect();
+
+        if !chain_bones.is_empty() {
+            // Sort bones to ensure we have them in order from start to end
+            let mut ordered_joints = Vec::new();
+            let mut current_joint_id = chain_bones[0].start_joint_id.clone();
+
+            // Build ordered list of joints
+            while let Some(bone) = chain_bones
+                .iter()
+                .find(|b| b.start_joint_id == current_joint_id)
+            {
+                ordered_joints.push(current_joint_id.clone());
+                current_joint_id = bone.end_joint_id.clone();
+            }
+            // Add the final end joint
+            ordered_joints.push(current_joint_id);
+
+            // Get start position from first bone
+            let start_position =
+                Point3::from(part.joint_positions[&chain_bones[0].start_joint_id].coords);
+
+            // Get pole position if specified in the IK chain settings
+            // You might need to adjust this based on where you store pole vector information
+            let pole_position = None; // For now
+
+            return Some(IKChainInfo {
+                start_position,
+                joint_ids: ordered_joints,
+                pole_position,
+            });
+        }
+    }
+    None
+}
+
+fn get_joint_lengths(parts: &[SkeletonRenderPart], chain_info: &IKChainInfo) -> Vec<f32> {
+    let mut lengths = Vec::new();
+
+    // Find the part containing these joints
+    for part in parts {
+        // For each pair of consecutive joints in the chain
+        for joint_pair in chain_info.joint_ids.windows(2) {
+            if let Some(bone) = part
+                .bones
+                .iter()
+                .find(|b| b.start_joint_id == joint_pair[0] && b.end_joint_id == joint_pair[1])
+            {
+                lengths.push(bone.length);
+            }
+        }
+
+        // If we found any bones, we found the right part
+        if !lengths.is_empty() {
+            break;
+        }
+    }
+
+    lengths
+}
+
+/// Calculate intermediate joint positions for an IK chain
+fn solve_ik_chain(
+    start_pos: Point3<f32>,
+    target_pos: Point3<f32>,
+    pole_pos: Option<Point3<f32>>,
+    joint_lengths: &[f32],
+) -> Vec<Point3<f32>> {
+    let mut positions = Vec::new();
+    positions.push(start_pos);
+
+    // For a basic 2-bone IK (like arm or leg):
+    if joint_lengths.len() == 2 {
+        let total_length: f32 = joint_lengths.iter().sum();
+        let target_vec = target_pos - start_pos;
+        let target_dist = target_vec.magnitude();
+
+        // If target is too far, stretch towards it
+        if target_dist > total_length {
+            let dir = target_vec.normalize();
+            // Place middle joint along the line to target
+            let mid_pos = start_pos + dir * joint_lengths[0];
+            positions.push(mid_pos);
+            positions.push(target_pos);
+        } else {
+            // Use cosine law to find middle joint position
+            let a = joint_lengths[0];
+            let b = joint_lengths[1];
+            let c = target_dist;
+
+            // Find angle using cosine law
+            let cos_angle = (a * a + c * c - b * b) / (2.0 * a * c);
+            let angle = cos_angle.clamp(-1.0, 1.0).acos();
+
+            // Find middle joint position
+            let dir = target_vec.normalize();
+            let pole_dir = if let Some(pole) = pole_pos {
+                (pole - start_pos).normalize()
+            } else {
+                // Default up vector if no pole
+                Vector3::new(0.0, 1.0, 0.0)
+            };
+
+            // Create rotation basis
+            let right = dir.cross(&pole_dir).normalize();
+            let up = right.cross(&dir).normalize();
+
+            // Place middle joint
+            let mid_pos = start_pos + dir * (cos_angle * a) + up * (angle.sin() * a);
+            positions.push(mid_pos);
+            positions.push(target_pos);
+        }
+    }
+
+    positions
 }
 
 // Helper functions for interpolation and easing

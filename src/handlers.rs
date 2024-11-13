@@ -18,7 +18,8 @@ use std::{cell::RefCell, collections::HashMap};
 
 use super::shapes::Cube::Cube;
 use crate::{
-    animations::skeleton::Joint, core::SimpleCamera::SimpleCamera,
+    animations::skeleton::{IKChain, Joint},
+    core::SimpleCamera::SimpleCamera,
     helpers::landscapes::read_landscape_texture,
 };
 use crate::{
@@ -348,6 +349,7 @@ pub fn handle_add_skeleton_part(
     partComponentId: String,
     position: [f32; 3],
     joints: Vec<Joint>,
+    ik_chains: Vec<IKChain>,
     joint_positions: &HashMap<String, Point3<f32>>,
     // joint_rotations: &HashMap<String, Vector3<f32>>,
 ) {
@@ -361,6 +363,7 @@ pub fn handle_add_skeleton_part(
         &partComponentId,
         position,
         joints,
+        ik_chains,
         joint_positions,
         // joint_rotations,
     );

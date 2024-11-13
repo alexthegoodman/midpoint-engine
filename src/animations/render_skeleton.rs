@@ -9,7 +9,7 @@ use crate::{
     shapes::Sphere::Sphere,
 };
 
-use super::skeleton::{Joint, SkeletonPart};
+use super::skeleton::{IKChain, Joint, SkeletonPart};
 
 // // Vertices for a pyramid
 // const VERTICES: &[Vertex] = &[
@@ -119,6 +119,10 @@ pub struct BoneSegment {
     pub color: [f32; 4],
 
     pub joint_sphere: Sphere,
+    /// Optional ID of the IK chain that controls this bone
+    pub ik_chain_id: Option<String>,
+    /// Whether this bone is an end effector for its IK chain
+    pub is_ik_end_effector: bool,
 }
 
 impl BoneSegment {
@@ -130,7 +134,8 @@ impl BoneSegment {
         end_joint_id: String,
         start_pos: Point3<f32>,
         end_pos: Point3<f32>,
-        // parent_rotation: Option<Vector3<f32>>,
+        ik_chain_id: Option<String>,
+        is_ik_end_effector: bool,
     ) -> Self {
         // Calculate bone properties from joint positions
         let bone_vector = end_pos - start_pos;
@@ -194,6 +199,8 @@ impl BoneSegment {
             num_indices: INDICES.len() as u32,
             bind_group,
             joint_sphere,
+            ik_chain_id,
+            is_ik_end_effector,
         }
     }
 
@@ -321,24 +328,121 @@ impl SkeletonRenderPart {
     // }
 
     /// Creates bone segments from joint hierarchy
+    // pub fn create_bone_segments(
+    //     &mut self,
+    //     device: &wgpu::Device,
+    //     bind_group_layout: &wgpu::BindGroupLayout,
+    //     joints: Vec<Joint>,
+    //     joint_positions: &HashMap<String, Point3<f32>>,
+    //     // joint_rotations: &HashMap<String, Vector3<f32>>,
+    //     position: [f32; 3],
+    // ) {
+    //     let mut bones = Vec::new();
+
+    //     for joint in joints {
+    //         // let parent_rotation = joint
+    //         //     .parent_id
+    //         //     .as_ref()
+    //         //     .and_then(|id| joint_rotations.get(id))
+    //         //     .copied();
+
+    //         if let Some(parent_id) = &joint.parent_id {
+    //             if let (Some(start_pos), Some(end_pos)) = (
+    //                 joint_positions.get(parent_id),
+    //                 joint_positions.get(&joint.id),
+    //             ) {
+    //                 let adjusted_start = Point3::new(
+    //                     position[0] + start_pos.x,
+    //                     position[1] + start_pos.y,
+    //                     position[2] + start_pos.z,
+    //                 );
+    //                 let adjusted_end = Point3::new(
+    //                     position[0] + end_pos.x,
+    //                     position[1] + end_pos.y,
+    //                     position[2] + end_pos.z,
+    //                 );
+
+    //                 // let bone = BoneSegment::new(
+    //                 //     device,
+    //                 //     bind_group_layout,
+    //                 //     parent_id.clone(),
+    //                 //     joint.id.clone(),
+    //                 //     adjusted_start,
+    //                 //     adjusted_end,
+    //                 //     // parent_rotation,
+    //                 // );
+    //                 let bone = if let Some(ik_chain) = joint.ik_chain {
+    //                     BoneSegment::new(
+    //                         device,
+    //                         bind_group_layout,
+    //                         parent_id.clone(),
+    //                         joint.id.clone(),
+    //                         adjusted_start,
+    //                         adjusted_end,
+    //                         Some(ik_chain.id.clone()),
+    //                         joint.id == ik_chain.end_joint,
+    //                     )
+    //                 } else {
+    //                     BoneSegment::new(
+    //                         device,
+    //                         bind_group_layout,
+    //                         parent_id.clone(),
+    //                         joint.id.clone(),
+    //                         adjusted_start,
+    //                         adjusted_end,
+    //                         None,
+    //                         false,
+    //                     )
+    //                 };
+
+    //                 bones.push(bone);
+    //             }
+    //         }
+    //     }
+
+    //     // bones
+    //     self.bones = bones;
+    // }
+
     pub fn create_bone_segments(
         &mut self,
         device: &wgpu::Device,
         bind_group_layout: &wgpu::BindGroupLayout,
         joints: Vec<Joint>,
+        ik_chains: Vec<IKChain>,
         joint_positions: &HashMap<String, Point3<f32>>,
-        // joint_rotations: &HashMap<String, Vector3<f32>>,
         position: [f32; 3],
     ) {
         let mut bones = Vec::new();
 
-        for joint in joints {
-            // let parent_rotation = joint
-            //     .parent_id
-            //     .as_ref()
-            //     .and_then(|id| joint_rotations.get(id))
-            //     .copied();
+        // Create a map of joints to their IK chains for quick lookup
+        let mut joint_to_ik_chain: HashMap<String, &IKChain> = HashMap::new();
+        for chain in &ik_chains {
+            // Start from end joint and work backwards
+            let mut current_joint_id = chain.end_joint.clone();
 
+            while let Some(current_joint) = joints.iter().find(|j| j.id == current_joint_id) {
+                // Add this joint to the chain
+                joint_to_ik_chain.insert(current_joint.id.clone(), chain);
+
+                // If we've reached the start joint, we're done
+                if current_joint.id == chain.start_joint {
+                    break;
+                }
+
+                // Move to parent joint if there is one
+                if let Some(parent_id) = &current_joint.parent_id {
+                    current_joint_id = parent_id.clone();
+                } else {
+                    println!("Warning: Reached root joint before finding start joint of IK chain");
+                    break;
+                }
+            }
+        }
+
+        println!("joint_to_ik_chain {:?}", joint_to_ik_chain);
+
+        for joint in joints {
             if let Some(parent_id) = &joint.parent_id {
                 if let (Some(start_pos), Some(end_pos)) = (
                     joint_positions.get(parent_id),
@@ -355,6 +459,14 @@ impl SkeletonRenderPart {
                         position[2] + end_pos.z,
                     );
 
+                    // Check if this bone is part of an IK chain
+                    let ik_chain = joint_to_ik_chain.get(&joint.id).cloned();
+                    let is_end_effector = ik_chain
+                        .map(|chain| chain.end_joint == joint.id)
+                        .unwrap_or(false);
+
+                    println!("joint ik chain {:?} {:?}", joint.id, ik_chain);
+
                     let bone = BoneSegment::new(
                         device,
                         bind_group_layout,
@@ -362,14 +474,15 @@ impl SkeletonRenderPart {
                         joint.id.clone(),
                         adjusted_start,
                         adjusted_end,
-                        // parent_rotation,
+                        ik_chain.map(|chain| chain.id.clone()),
+                        is_end_effector,
                     );
                     bones.push(bone);
                 }
             }
         }
 
-        // bones
+        self.joint_positions = joint_positions.clone();
         self.bones = bones;
     }
 }

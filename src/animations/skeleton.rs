@@ -11,6 +11,31 @@ use std::collections::HashMap;
 //     /// Rotation order is XYZ
 // }
 
+// impl Joint {
+//     pub fn set_local_position(&mut self, position: [f32; 3]) {
+//         self.local_position = position;
+//     }
+// }
+
+/// Categorizes joints by their purpose
+// #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+// pub enum JointType {
+//     /// Standard skeletal joint
+//     Standard,
+//     /// Helper joint for better deformation
+//     Helper,
+//     /// Joint for attaching equipment/props
+//     Attachment,
+//     /// Joint for physics simulation
+//     Physics,
+//     /// Joint specifically for twist distribution
+//     Twist,
+//     /// Specialized joint for facial animation
+//     Facial,
+//     /// Control joint for IK systems
+//     IKControl,
+// }
+
 /// Represents constraints on joint movement
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct JointConstraints {
@@ -38,31 +63,6 @@ pub struct Joint {
     /// Optional movement constraints
     pub constraints: Option<JointConstraints>,
 }
-
-// impl Joint {
-//     pub fn set_local_position(&mut self, position: [f32; 3]) {
-//         self.local_position = position;
-//     }
-// }
-
-/// Categorizes joints by their purpose
-// #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-// pub enum JointType {
-//     /// Standard skeletal joint
-//     Standard,
-//     /// Helper joint for better deformation
-//     Helper,
-//     /// Joint for attaching equipment/props
-//     Attachment,
-//     /// Joint for physics simulation
-//     Physics,
-//     /// Joint specifically for twist distribution
-//     Twist,
-//     /// Specialized joint for facial animation
-//     Facial,
-//     /// Control joint for IK systems
-//     IKControl,
-// }
 
 /// Represents an IK chain in the skeleton
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
