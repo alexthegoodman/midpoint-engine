@@ -35,7 +35,7 @@ pub const BASE_LOD_DISTANCE: f32 = 1000.0; // Distance for first LOD transition
 pub const LOD_DISTANCE_MULTIPLIER: f32 = 0.5; // Each level shows more detail at half the distance
 
 // Helper function to calculate vertex normals
-pub fn calculate_normals(vertices: &mut [Vertex], indices: &[u32]) {
+pub fn calculate_normals(vertices: &mut Vec<Vertex>, indices: &Vec<u32>) {
     // Reset all normals
     for vertex in vertices.iter_mut() {
         vertex.normal = [0.0, 0.0, 0.0];

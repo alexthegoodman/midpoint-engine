@@ -18,7 +18,7 @@ use crate::core::Transform::{matrix4_to_raw_array, Transform};
 use crate::handlers::{get_camera, Vertex};
 use crate::helpers::landscapes::get_landscape_pixels;
 use crate::helpers::saved_data::LandscapeTextureKinds;
-use crate::landscapes::LandscapeLOD::{sample_height_world, MAX_LOD_LEVELS};
+use crate::landscapes::LandscapeLOD::{calculate_normals, sample_height_world, MAX_LOD_LEVELS};
 use crate::landscapes::TerrainManager::calculate_lod_distances;
 
 use super::LandscapeLOD::{
@@ -1027,7 +1027,7 @@ impl QuadNode {
         }
 
         let vertices: Vec<Vertex> = merged_vertex_info
-            .iter()
+            .iter_mut()
             .map(|info| info.vertex.clone())
             .collect();
 
@@ -1077,6 +1077,10 @@ impl QuadNode {
             }
         }
 
+        let mut cloned_vertices = &mut vertices.clone();
+
+        calculate_normals(cloned_vertices, &indices);
+
         // let mut vertices: Vec<Vertex> = Vec::new();
         // let mut indices = Vec::new();
 
@@ -1106,7 +1110,7 @@ impl QuadNode {
         // Create vertex buffer
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Terrain Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
+            contents: bytemuck::cast_slice(&cloned_vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 

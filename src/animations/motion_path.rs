@@ -965,19 +965,19 @@ fn solve_ik_chain(
     let mut positions = Vec::new();
     positions.push(start_pos);
 
-    println!("Start pos: {:?}, Target pos: {:?}", start_pos, target_pos);
-    println!("Joint lengths: {:?}", joint_lengths);
+    // println!("Start pos: {:?}, Target pos: {:?}", start_pos, target_pos);
+    // println!("Joint lengths: {:?}", joint_lengths);
 
     if joint_lengths.len() == 2 {
         let total_length: f32 = joint_lengths.iter().sum();
         let target_vec = target_pos - start_pos;
         let target_dist = target_vec.magnitude();
 
-        println!(
-            "Target distance: {}, Total length: {}",
-            target_dist, total_length
-        );
-        println!("Target vector: {:?}", target_vec);
+        // println!(
+        //     "Target distance: {}, Total length: {}",
+        //     target_dist, total_length
+        // );
+        // println!("Target vector: {:?}", target_vec);
 
         let dir = target_vec.normalize();
 
@@ -994,10 +994,10 @@ fn solve_ik_chain(
             rotated_forward
         };
 
-        println!("Direction: {:?}, Pole direction: {:?}", dir, pole_dir);
+        // println!("Direction: {:?}, Pole direction: {:?}", dir, pole_dir);
 
         if target_dist >= total_length {
-            println!("Target beyond reach, stretching");
+            // println!("Target beyond reach, stretching");
             let mid_pos = start_pos + dir * joint_lengths[0];
             positions.push(mid_pos);
             positions.push(target_pos);
@@ -1010,12 +1010,12 @@ fn solve_ik_chain(
             let cos_angle = ((a * a + c * c - b * b) / (2.0 * a * c)).clamp(-1.0, 1.0);
             let angle = cos_angle.acos();
 
-            println!("Angles - cos: {}, angle: {}", cos_angle, angle);
+            // println!("Angles - cos: {}, angle: {}", cos_angle, angle);
 
             // Create rotation basis ensuring directions are valid
             let right = dir.cross(&pole_dir);
             if right.magnitude() < 0.0001 {
-                println!("Warning: Cross product near zero, using better fallback");
+                // println!("Warning: Cross product near zero, using better fallback");
                 // Use world-space up as reference unless we're vertical
                 let world_up = Vector3::new(0.0, 1.0, 0.0);
                 let right = if dir.y.abs() > 0.9999 {
@@ -1032,7 +1032,7 @@ fn solve_ik_chain(
                 // Calculate midpoint using this more stable basis
                 let mid_pos = start_pos + dir * (cos_angle * a) + up * (angle.sin() * a);
 
-                println!("Better fallback basis - right: {:?}, up: {:?}", right, up);
+                // println!("Better fallback basis - right: {:?}, up: {:?}", right, up);
                 positions.push(mid_pos);
                 positions.push(target_pos);
             } else {
@@ -1040,12 +1040,12 @@ fn solve_ik_chain(
                 let up = right.cross(&dir).normalize();
 
                 let mid_pos = start_pos + dir * (cos_angle * a) + up * (angle.sin() * a);
-                println!("Calculated mid pos: {:?}", mid_pos);
+                // println!("Calculated mid pos: {:?}", mid_pos);
                 if mid_pos.coords.iter().all(|x| x.is_finite()) {
                     positions.push(mid_pos);
                     positions.push(target_pos);
                 } else {
-                    println!("Warning: Invalid midpoint calculated, using fallback");
+                    // println!("Warning: Invalid midpoint calculated, using fallback");
                     let mid_pos = start_pos + dir * joint_lengths[0];
                     positions.push(mid_pos);
                     positions.push(target_pos);

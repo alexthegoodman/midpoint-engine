@@ -630,6 +630,24 @@ where
 
                 let model_bind_group_layout = Arc::new(model_bind_group_layout);
 
+                let light_bind_group_layout = gpu_resources.device.create_bind_group_layout(
+                    &wgpu::BindGroupLayoutDescriptor {
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                        label: Some("light_bind_group_layout"),
+                    },
+                );
+
+                let light_bind_group_layout = Arc::new(light_bind_group_layout);
+
                 let texture_bind_group_layout = gpu_resources.device.create_bind_group_layout(
                     &wgpu::BindGroupLayoutDescriptor {
                         entries: &[
@@ -851,6 +869,7 @@ where
                     window_width,
                     window_height,
                     camera_bind_group_layout.clone(),
+                    light_bind_group_layout.clone(),
                 )
                 .await;
 

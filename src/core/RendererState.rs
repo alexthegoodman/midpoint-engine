@@ -13,6 +13,7 @@ use crate::animations::skeleton::{IKChain, Joint, PartConnection};
 use crate::handlers::get_camera;
 use crate::landscapes::QuadNode::QuadNode;
 use crate::landscapes::TerrainManager::TerrainManager;
+use crate::lighting::LightState::LightState;
 use crate::{
     core::Texture::Texture,
     helpers::saved_data::{ComponentData, ComponentKind},
@@ -95,9 +96,9 @@ pub struct RendererState {
     pub pyramids: Vec<Pyramid>,
     pub grids: Vec<Grid>,
     pub models: Vec<Model>,
-    // pub landscapes: Vec<Landscape>,
     pub skeleton_parts: Vec<SkeletonRenderPart>, // will contain buffers and the like
     pub terrain_managers: Vec<TerrainManager>,
+    pub light_state: LightState,
 
     // animations
     pub active_animations: Vec<AnimationPlayback>,
@@ -109,6 +110,7 @@ pub struct RendererState {
     pub color_render_mode_buffer: Arc<wgpu::Buffer>,
     pub camera_uniform_buffer: Arc<wgpu::Buffer>,
     pub camera_bind_group: Arc<wgpu::BindGroup>,
+    pub light_bind_group_layout: Arc<wgpu::BindGroupLayout>,
 
     // state
     pub project_selected: Option<Uuid>,
@@ -173,7 +175,11 @@ impl RendererState {
         window_width: u32,
         window_height: u32,
         camera_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+        light_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     ) -> Self {
+        // let there be light!
+        let light_state = LightState::new(device, &light_bind_group_layout);
+
         // create the utility grid(s)
         let mut grids = Vec::new();
         grids.push(Grid::new(
@@ -298,6 +304,7 @@ impl RendererState {
             skeleton_parts,
             terrain_managers,
             active_animations: Vec::new(),
+            light_state,
 
             // device,
             // queue,
@@ -308,6 +315,7 @@ impl RendererState {
             color_render_mode_buffer,
             camera_uniform_buffer,
             camera_bind_group,
+            light_bind_group_layout,
 
             project_selected: None,
             current_view: "welcome".to_string(),
