@@ -3,20 +3,6 @@ use std::collections::HashMap;
 
 // NOTE: these types will be fed to AI when generating SkeletonParts
 
-/// Represents the orientation and rotation order for a joint
-// #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-// pub struct JointOrientation {
-//     /// Default rotation as a quaternion
-//     pub default_rotation: [f32; 4], // Quat
-//     /// Rotation order is XYZ
-// }
-
-// impl Joint {
-//     pub fn set_local_position(&mut self, position: [f32; 3]) {
-//         self.local_position = position;
-//     }
-// }
-
 /// Categorizes joints by their purpose
 // #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 // pub enum JointType {
@@ -58,15 +44,30 @@ pub struct Joint {
     pub name: String,
     /// ID of the parent joint (None for root)
     pub parent_id: Option<String>,
-    /// Local position relative to parent
-    pub world_position: [f32; 3], // Vec3
+    /// If this Joint is IK (not FK), then these setting should be added
+    /// Alert AI to set ONLY IK Settings OR FK Settings
+    pub ik_settings: Option<IKSettings>,
+    /// If this Joint is FK (not IK), then these settings should be added
+    pub fk_settings: Option<FKSettings>,
     /// Optional movement constraints
     pub constraints: Option<JointConstraints>,
 }
 
-/// Represents an IK chain in the skeleton
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-pub struct IKChain {
+pub struct IKSettings {
+    /// Ideally, the position relative to this joint's part's attachment to the root part
+    pub position: [f32; 3],
+}
+
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+pub struct FKSettings {
+    pub rotation: [f32; 4],
+    pub length: f32,
+}
+
+/// Represents a chain which can be used for IK or FK depending on mode
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+pub struct KinematicChain {
     /// Unique identifier for the chain
     pub id: String,
     /// Name of the chain
@@ -75,25 +76,19 @@ pub struct IKChain {
     pub start_joint: String,
     /// Joint ID of the end of the chain
     pub end_joint: String,
-    /// Joint ID of the IK control joint
-    pub control_joint: String,
-    /// Number of iterations for IK solving
-    pub solver_iterations: u32,
-    /// Chain-specific settings
-    pub settings: IKSettings,
+    /// Pole vector control joint (required for now)
+    pub pole_vector_joint: String,
+    /// Chain-specific settings include pole vector for control point
+    pub settings: KinematicSettings,
 }
 
-/// Settings for IK chain behavior
+/// Settings for kinematic chain behavior
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-pub struct IKSettings {
+pub struct KinematicSettings {
     /// Whether the chain supports stretching
     pub allow_stretch: bool,
-    /// Pole vector control joint ID if any
-    pub pole_vector_joint: Option<String>,
     /// Whether to maintain foot contact
     pub foot_contact: bool,
-    /// Blend weight with FK (0.0 - 1.0)
-    pub fk_blend: f32,
 }
 
 // /// Complete skeleton definition
@@ -103,8 +98,6 @@ pub struct Skeleton {
     pub id: String,
     /// load the part assembly
     pub assembly_config: SkeletonAssemblyConfig,
-    // // load the configured motion paths
-    // pub motion_paths: Vec<MotionPath>;
 }
 
 /// Configuration for a specific level of detail
@@ -112,8 +105,6 @@ pub struct Skeleton {
 pub struct LodConfig {
     /// LOD level (0 is highest detail)
     pub level: u32,
-    /// Distance at which this LOD becomes active
-    pub distance: f32,
     /// Joints to disable at this LOD level
     pub disabled_joints: Vec<String>,
     /// Maximum influences per vertex at this LOD
@@ -142,8 +133,8 @@ pub struct SkeletonPart {
     pub name: String,
     /// The joints that make up this part
     pub joints: Vec<Joint>,
-    /// IK chains contained in this part
-    pub ik_chains: Vec<IKChain>,
+    /// Kinematic chains contained in this part
+    pub k_chains: Vec<KinematicChain>,
     /// Points where this part can be attached to others
     pub attach_points: Vec<AttachPoint>,
 }
@@ -195,15 +186,3 @@ pub struct AssemblySettings {
 pub struct AssmeblyLodConfig {
     pub use_lod_configs: bool,
 }
-
-// #[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
-// pub enum NamingStrategy {
-//     /// Add prefix based on part ID
-//     Prefix,
-//     /// Add suffix based on part ID
-//     Suffix,
-//     /// Use GUID-style unique identifiers
-//     Guid,
-//     /// Keep original names, error on conflicts
-//     Strict,
-// }

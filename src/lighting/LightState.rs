@@ -102,11 +102,12 @@ impl LightState {
         self.transform.update_uniform_buffer(queue);
 
         // Get direction from rotation (assuming -Z is forward)
-        let rotation = Rotation3::from_euler_angles(
-            self.transform.rotation.x,
-            self.transform.rotation.y,
-            self.transform.rotation.z,
-        );
+        // let rotation = Rotation3::from_euler_angles(
+        //     self.transform.rotation.x,
+        //     self.transform.rotation.y,
+        //     self.transform.rotation.z,
+        // );
+        let rotation = self.transform.rotation.to_rotation_matrix();
         let direction = rotation * Vector3::new(0.0, 0.0, -1.0);
 
         // Update uniform buffer

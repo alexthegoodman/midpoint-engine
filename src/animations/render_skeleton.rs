@@ -1,6 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use nalgebra::{Matrix4, Point3, Rotation3, UnitQuaternion, UnitVector3, Vector3};
+use nalgebra::{
+    Matrix4, Point3, Quaternion, Rotation, Rotation3, Unit, UnitQuaternion, UnitVector3, Vector3,
+};
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -12,52 +14,8 @@ use crate::{
 
 use super::{
     motion_path::AttachmentTransform,
-    skeleton::{IKChain, Joint, PartConnection, SkeletonPart},
+    skeleton::{AttachPoint, Joint, KinematicChain, PartConnection, SkeletonPart},
 };
-
-// // Vertices for a pyramid
-// const VERTICES: &[Vertex] = &[
-//     Vertex {
-//         position: [0.0, 1.0, 0.0],
-//         normal: [0.0, 0.0, 0.0],
-//         tex_coords: [0.0, 0.0],
-//         color: [1.0, 0.0, 0.0],
-//     }, // Apex
-//     Vertex {
-//         position: [-1.0, -1.0, -1.0],
-//         normal: [0.0, 0.0, 0.0],
-//         tex_coords: [0.0, 0.0],
-//         color: [0.0, 1.0, 0.0],
-//     }, // Base vertices
-//     Vertex {
-//         position: [1.0, -1.0, -1.0],
-//         normal: [0.0, 0.0, 0.0],
-//         tex_coords: [0.0, 0.0],
-//         color: [0.0, 0.0, 1.0],
-//     },
-//     Vertex {
-//         position: [1.0, -1.0, 1.0],
-//         normal: [0.0, 0.0, 0.0],
-//         tex_coords: [0.0, 0.0],
-//         color: [1.0, 1.0, 0.0],
-//     },
-//     Vertex {
-//         position: [-1.0, -1.0, 1.0],
-//         normal: [0.0, 0.0, 0.0],
-//         tex_coords: [0.0, 0.0],
-//         color: [0.0, 1.0, 1.0],
-//     },
-// ];
-
-// // Indices for a pyramid
-// const INDICES: &[u16] = &[
-//     0, 1, 2, // Side 1
-//     0, 2, 3, // Side 2
-//     0, 3, 4, // Side 3
-//     0, 4, 1, // Side 4
-//     1, 3, 2, // Base 1
-//     1, 4, 3, // Base 2
-// ];
 
 // NOTE: these vertices extend across just 1 unit of space
 // Vertices for a pyramid pointing along -Y axis
@@ -123,11 +81,13 @@ pub struct BoneSegment {
     pub color: [f32; 4],
 
     pub joint_sphere: Sphere,
-    /// Optional ID of the IK chain that controls this bone
-    pub ik_chain_id: Option<String>,
-    /// Whether this bone is an end effector for its IK chain
-    pub is_ik_end_effector: bool,
-    pub end_joint_original_offset: Vector3<f32>,
+
+    pub is_end_effector: bool,
+
+    // make dynamic?
+    pub joints: Vec<Joint>, // always just two
+    pub k_chain: Option<KinematicChain>,
+    pub attach_point: Option<AttachPoint>,
 }
 
 impl BoneSegment {
@@ -139,8 +99,10 @@ impl BoneSegment {
         end_joint_id: String,
         start_pos: Point3<f32>,
         end_pos: Point3<f32>,
-        ik_chain_id: Option<String>,
-        is_ik_end_effector: bool,
+        k_chain: Option<KinematicChain>,
+        attach_point: Option<AttachPoint>,
+        joints: Vec<Joint>,
+        is_end_effector: bool,
     ) -> Self {
         // Calculate bone properties from joint positions
         let bone_vector = end_pos - start_pos;
@@ -183,12 +145,14 @@ impl BoneSegment {
         // Position is at start joint
         // Scale x and z are small to make thin bones, y is length
         // Rotation aligns bone with direction vector
-        let transform = Transform::new(
-            start_pos.coords,                 // position at start joint
-            rotation,                         // rotation to align with bone direction
+        let mut transform = Transform::new(
+            start_pos.coords, // position at start joint
+            Vector3::new(0.0, 0.0, 0.0),
             Vector3::new(0.05, length, 0.05), // scale to create bone shape
             uniform_buffer,
         );
+
+        transform.rotation = rotation; // set with quat for accuracy
 
         let mut joint_sphere = Sphere::new(device, bind_group_layout, 0.05, 16, 16);
         joint_sphere.transform.position = start_pos.coords;
@@ -204,38 +168,80 @@ impl BoneSegment {
             num_indices: INDICES.len() as u32,
             bind_group,
             joint_sphere,
-            ik_chain_id,
-            is_ik_end_effector,
-            end_joint_original_offset: bone_vector,
+            k_chain,
+            is_end_effector,
+            attach_point,
+            joints,
         }
     }
 
+    // /// Updates the bone transform based on new joint positions
+    // pub fn update_from_joint_positions(&mut self, start_pos: Point3<f32>, end_pos: Point3<f32>) {
+    //     let bone_vector = end_pos - start_pos;
+    //     let length = bone_vector.magnitude();
+
+    //     let rotation = Self::calculate_local_bone_rotation(&bone_vector);
+
+    //     // println!("joint rotation {:?}", rotation);
+
+    //     self.transform.update_position(start_pos.coords.into());
+    //     self.transform.rotation = rotation;
+    //     self.transform.update_scale([0.1, length, 0.1]);
+    //     self.length = length;
+    // }
     /// Updates the bone transform based on new joint positions
     pub fn update_from_joint_positions(
         &mut self,
         start_pos: Point3<f32>,
         end_pos: Point3<f32>,
-        parent_rotation: Option<Vector3<f32>>,
+        attachment_transform: AttachmentTransform,
     ) {
+        // no need for this double adjustment
+        // if let Some(attach_point) = &self.attach_point {
+        //     let transform_offset = attachment_transform.position.coords;
+
+        //     // Convert attach point offset to Vector3
+        //     let attach_offset = Vector3::new(
+        //         attach_point.local_position[0] + transform_offset.x,
+        //         attach_point.local_position[1] + transform_offset.y,
+        //         attach_point.local_position[2] + transform_offset.z,
+        //     );
+
+        //     // Apply attach point offset to positions
+        //     let adjusted_start = start_pos - attach_offset; // Subtract because we want position relative to attach point
+        //     let adjusted_end = end_pos - attach_offset;
+
+        //     let bone_vector = adjusted_end - adjusted_start;
+        //     let length = bone_vector.magnitude();
+
+        //     let rotation = Self::calculate_local_bone_rotation(&bone_vector);
+
+        //     self.transform.update_position(adjusted_start.coords.into());
+        //     self.transform.rotation = rotation;
+        //     self.transform.update_scale([0.1, length, 0.1]);
+        //     self.length = length;
+        // } else {
+        // Original behavior for bones without attach points
         let bone_vector = end_pos - start_pos;
         let length = bone_vector.magnitude();
 
         let rotation = Self::calculate_local_bone_rotation(&bone_vector);
 
         self.transform.update_position(start_pos.coords.into());
-        self.transform.update_rotation(rotation.into());
+        self.transform.rotation = rotation;
         self.transform.update_scale([0.1, length, 0.1]);
         self.length = length;
+        // }
     }
 
     // /// Calculates rotation to align bone with direction vector
-    fn calculate_local_bone_rotation(bone_vector: &Vector3<f32>) -> Vector3<f32> {
-        // Default bone direction (assuming bone model points up along Y axis)
+    fn calculate_local_bone_rotation(bone_vector: &Vector3<f32>) -> Unit<Quaternion<f32>> {
+        // Default bone direction
         let default_direction = Vector3::new(0.0, -1.0, 0.0);
 
         // If bone vector is zero or nearly zero, return no rotation
         if bone_vector.magnitude() < 1e-6 {
-            return Vector3::zeros();
+            return UnitQuaternion::identity();
         }
 
         // Get unit vector in bone direction
@@ -245,51 +251,22 @@ impl BoneSegment {
         let rotation = Rotation3::rotation_between(&default_direction, &bone_direction)
             .unwrap_or(Rotation3::identity());
 
-        // Convert rotation matrix to euler angles
-        let euler = rotation.euler_angles();
-        Vector3::new(euler.0, euler.1, euler.2)
+        UnitQuaternion::from_rotation_matrix(&rotation)
     }
+}
 
-    fn calculate_bone_rotation(
-        bone_vector: &Vector3<f32>,
-        parent_rotation: Option<Vector3<f32>>,
-    ) -> Vector3<f32> {
-        // If bone vector is zero or nearly zero, return parent rotation or zero
-        if bone_vector.magnitude() < 1e-6 {
-            return parent_rotation.unwrap_or_else(Vector3::zeros);
-        }
-
-        // Get direction from parent's orientation if available
-        let parent_transform = if let Some(parent_rot) = parent_rotation {
-            Rotation3::from_euler_angles(parent_rot.x, parent_rot.y, parent_rot.z)
-        } else {
-            // If no parent rotation, use identity (vertical orientation)
-            Rotation3::identity()
-        };
-
-        println!("parent_transform {:?}", parent_transform);
-
-        // Transform the bone vector into parent's local space
-        let local_direction = parent_transform.inverse() * bone_vector.normalize();
-
-        // Calculate rotation in parent's local space
-        let local_rotation = if local_direction.magnitude() > 1e-6 {
-            let default_direction = Vector3::new(0.0, 1.0, 0.0);
-            Rotation3::rotation_between(&default_direction, &local_direction)
-                .unwrap_or(Rotation3::identity())
-        } else {
-            Rotation3::identity()
-        };
-
-        println!("local_rotation {:?}", local_rotation);
-
-        // Combine parent rotation with local rotation
-        let final_rotation = parent_transform * local_rotation;
-        let euler = final_rotation.euler_angles();
-
-        println!("euler {:?}", euler);
-
-        Vector3::new(euler.0, euler.1, euler.2)
+pub fn calculate_bone_end_position(
+    start_pos: Point3<f32>,
+    end_pos: Point3<f32>,
+    merge_rotation: Option<UnitQuaternion<f32>>,
+    length: f32,
+) -> Point3<f32> {
+    if let Some(merge_rot) = merge_rotation {
+        let bone_vector = end_pos - start_pos;
+        let direction = merge_rot * Vector3::new(0.0, length, 0.0);
+        start_pos + direction
+    } else {
+        end_pos
     }
 }
 
@@ -299,13 +276,9 @@ pub struct SkeletonRenderPart {
     pub skeleton_part_id: String,
     /// All bone segments in this part
     pub bones: Vec<BoneSegment>,
-
-    // Cache of computed data
-    /// Current world space positions of joints
-    pub joint_positions: HashMap<String, nalgebra::Point3<f32>>,
-
     // temp transforms for calculations, not buffers
     pub attachment_transform: AttachmentTransform,
+    pub connection: Option<PartConnection>,
 }
 
 impl SkeletonRenderPart {
@@ -313,132 +286,39 @@ impl SkeletonRenderPart {
         SkeletonRenderPart {
             skeleton_part_id: part_id,
             bones: Vec::new(),
-            joint_positions: HashMap::new(),
+            // joint_positions: HashMap::new(),
             attachment_transform: AttachmentTransform::new(
                 Point3::origin(),
                 UnitQuaternion::identity(),
                 Vector3::new(1.0, 1.0, 1.0),
             ),
+            connection: None,
         }
     }
-
-    // /// Updates bone transforms based on current joint positions
-    // pub fn update_bones(
-    //     &mut self,
-    //     joint_positions: &HashMap<String, Point3<f32>>,
-    //     queue: &wgpu::Queue,
-    // ) {
-    //     for bone in &mut self.bones {
-    //         if let (Some(start_pos), Some(end_pos)) = (
-    //             joint_positions.get(&bone.start_joint_id),
-    //             joint_positions.get(&bone.end_joint_id),
-    //         ) {
-    //             // Update bone transform based on new joint positions
-    //             bone.update_from_joint_positions(*start_pos, *end_pos, parent_rotation);
-    //             // Update GPU buffer
-    //             bone.transform.update_uniform_buffer(queue);
-    //         }
-    //     }
-    // }
-
-    /// Creates bone segments from joint hierarchy
-    // pub fn create_bone_segments(
-    //     &mut self,
-    //     device: &wgpu::Device,
-    //     bind_group_layout: &wgpu::BindGroupLayout,
-    //     joints: Vec<Joint>,
-    //     joint_positions: &HashMap<String, Point3<f32>>,
-    //     // joint_rotations: &HashMap<String, Vector3<f32>>,
-    //     position: [f32; 3],
-    // ) {
-    //     let mut bones = Vec::new();
-
-    //     for joint in joints {
-    //         // let parent_rotation = joint
-    //         //     .parent_id
-    //         //     .as_ref()
-    //         //     .and_then(|id| joint_rotations.get(id))
-    //         //     .copied();
-
-    //         if let Some(parent_id) = &joint.parent_id {
-    //             if let (Some(start_pos), Some(end_pos)) = (
-    //                 joint_positions.get(parent_id),
-    //                 joint_positions.get(&joint.id),
-    //             ) {
-    //                 let adjusted_start = Point3::new(
-    //                     position[0] + start_pos.x,
-    //                     position[1] + start_pos.y,
-    //                     position[2] + start_pos.z,
-    //                 );
-    //                 let adjusted_end = Point3::new(
-    //                     position[0] + end_pos.x,
-    //                     position[1] + end_pos.y,
-    //                     position[2] + end_pos.z,
-    //                 );
-
-    //                 // let bone = BoneSegment::new(
-    //                 //     device,
-    //                 //     bind_group_layout,
-    //                 //     parent_id.clone(),
-    //                 //     joint.id.clone(),
-    //                 //     adjusted_start,
-    //                 //     adjusted_end,
-    //                 //     // parent_rotation,
-    //                 // );
-    //                 let bone = if let Some(ik_chain) = joint.ik_chain {
-    //                     BoneSegment::new(
-    //                         device,
-    //                         bind_group_layout,
-    //                         parent_id.clone(),
-    //                         joint.id.clone(),
-    //                         adjusted_start,
-    //                         adjusted_end,
-    //                         Some(ik_chain.id.clone()),
-    //                         joint.id == ik_chain.end_joint,
-    //                     )
-    //                 } else {
-    //                     BoneSegment::new(
-    //                         device,
-    //                         bind_group_layout,
-    //                         parent_id.clone(),
-    //                         joint.id.clone(),
-    //                         adjusted_start,
-    //                         adjusted_end,
-    //                         None,
-    //                         false,
-    //                     )
-    //                 };
-
-    //                 bones.push(bone);
-    //             }
-    //         }
-    //     }
-
-    //     // bones
-    //     self.bones = bones;
-    // }
 
     pub fn create_bone_segments(
         &mut self,
         device: &wgpu::Device,
         bind_group_layout: &wgpu::BindGroupLayout,
         joints: Vec<Joint>,
-        ik_chains: Vec<IKChain>,
+        k_chains: Vec<KinematicChain>,
+        attach_points: Vec<AttachPoint>,
         joint_positions: &HashMap<String, Point3<f32>>,
         position: [f32; 3],
         connection: Option<PartConnection>,
     ) {
+        println!("create_bone_segments");
         let mut bones = Vec::new();
 
-        // Create a map of joints to their IK chains for quick lookup
-        let mut joint_to_ik_chain: HashMap<String, &IKChain> = HashMap::new();
-        for chain in &ik_chains {
+        // Create a map of joints to their K chains for quick lookup
+        let mut joint_to_k_chain: HashMap<String, &KinematicChain> = HashMap::new();
+        for chain in &k_chains {
             // Start from end joint and work backwards
             let mut current_joint_id = chain.end_joint.clone();
 
             while let Some(current_joint) = joints.iter().find(|j| j.id == current_joint_id) {
                 // Add this joint to the chain
-                joint_to_ik_chain.insert(current_joint.id.clone(), chain);
+                joint_to_k_chain.insert(current_joint.id.clone(), chain);
 
                 // If we've reached the start joint, we're done
                 if current_joint.id == chain.start_joint {
@@ -455,7 +335,9 @@ impl SkeletonRenderPart {
             }
         }
 
-        println!("joint_to_ik_chain {:?}", joint_to_ik_chain);
+        // println!("joint_to_ik_chain {:?}", joint_to_k_chain);
+
+        let joints_cloned = joints.clone();
 
         for joint in joints {
             if let Some(parent_id) = &joint.parent_id {
@@ -475,24 +357,67 @@ impl SkeletonRenderPart {
                     );
 
                     // Check if this bone is part of an IK chain
-                    let ik_chain = joint_to_ik_chain.get(&joint.id).cloned();
-                    let is_end_effector = ik_chain
+                    let k_chain = joint_to_k_chain.get(&joint.id).cloned();
+                    let is_end_effector = k_chain
                         .map(|chain| chain.end_joint == joint.id)
                         .unwrap_or(false);
 
-                    println!("joint ik chain {:?} {:?}", joint.id, ik_chain);
+                    if let Some(ref connection) = connection {
+                        let parent_attach_point = attach_points.iter().find(|ap| {
+                            &ap.id
+                                == connection
+                                    .parent_attach_point
+                                    .as_ref()
+                                    .expect("Couldn't get attach point")
+                        });
+                        let child_attach_point = attach_points.iter().find(|ap| {
+                            &ap.id
+                                == connection
+                                    .child_attach_point
+                                    .as_ref()
+                                    .expect("Couldn't get attach point")
+                        });
 
-                    let bone = BoneSegment::new(
-                        device,
-                        bind_group_layout,
-                        parent_id.clone(),
-                        joint.id.clone(),
-                        adjusted_start,
-                        adjusted_end,
-                        ik_chain.map(|chain| chain.id.clone()),
-                        is_end_effector,
-                    );
-                    bones.push(bone);
+                        println!(
+                            "check it {:?} {:?} {:?} {:?}",
+                            attach_points,
+                            connection,
+                            parent_attach_point.is_some(),
+                            child_attach_point.is_some()
+                        );
+
+                        let parent_joint = joints_cloned
+                            .iter()
+                            .find(|j| &j.id == parent_id)
+                            .expect("Couldn't find parent joint")
+                            .clone();
+                        let main_joint = joints_cloned
+                            .iter()
+                            .find(|j| j.id == joint.id)
+                            .expect("Couldn't find joint")
+                            .clone();
+                        let mut joint_pair: Vec<Joint> = Vec::new();
+                        joint_pair.push(parent_joint);
+                        joint_pair.push(main_joint);
+
+                        if let Some(child_attach_point) = child_attach_point {
+                            println!("joint ik chain {:?} {:?}", joint.id, k_chain);
+
+                            let bone = BoneSegment::new(
+                                device,
+                                bind_group_layout,
+                                parent_id.clone(),
+                                joint.id.clone(),
+                                adjusted_start,
+                                adjusted_end,
+                                k_chain.cloned(),
+                                Some(child_attach_point.clone()),
+                                joint_pair,
+                                is_end_effector,
+                            );
+                            bones.push(bone);
+                        }
+                    }
                 }
             }
         }
@@ -502,49 +427,6 @@ impl SkeletonRenderPart {
                 create_attachment_transform(&connection.expect("Couldn't get connection"));
         }
 
-        self.joint_positions = joint_positions.clone();
         self.bones = bones;
     }
-}
-
-pub fn create_joint_rotations(
-    joints: Vec<Joint>,
-    joint_positions: &HashMap<String, Point3<f32>>,
-) -> HashMap<String, Vector3<f32>> {
-    let mut joint_rotations: HashMap<String, Vector3<f32>> = HashMap::new();
-
-    for joint in joints.iter() {
-        if let Some(parent_id) = &joint.parent_id {
-            let parent_joint = joints
-                .iter()
-                .find(|pj| pj.id == *parent_id)
-                .expect("Couldn't find parent joint");
-
-            if let Some(parent_parent_id) = &parent_joint.parent_id {
-                // let parent_parent_joint = joints.iter().find(|pj| pj.id == parent_parent_id).expect("Couldn't find parent parent joint");
-
-                if let (Some(parent_pos), Some(parent_parent_pos)) = (
-                    joint_positions.get(parent_id),
-                    joint_positions.get(parent_parent_id),
-                ) {
-                    // Calculate direction vector from parent to current joint
-                    let bone_vector = parent_pos - parent_parent_pos;
-
-                    // Calculate rotation needed to align with this direction
-                    // (using our previous calculate_bone_rotation logic)
-                    let rotation = BoneSegment::calculate_local_bone_rotation(&bone_vector);
-
-                    joint_rotations.insert(joint.id.clone(), rotation);
-                }
-            } else {
-                // Root joint - could use default orientation or calculate based on children
-                joint_rotations.insert(joint.id.clone(), Vector3::zeros());
-            }
-        } else {
-            // Root joint - could use default orientation or calculate based on children
-            joint_rotations.insert(joint.id.clone(), Vector3::zeros());
-        }
-    }
-
-    joint_rotations
 }

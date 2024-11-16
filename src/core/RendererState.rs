@@ -7,9 +7,9 @@ use rapier3d::prelude::{ColliderSet, QueryPipeline, RigidBodySet};
 use uuid::Uuid;
 use wgpu::BindGroupLayout;
 
-use crate::animations::motion_path::{update_skeleton_animation, AnimationPlayback};
+use crate::animations::motion_path::AnimationPlayback;
 use crate::animations::render_skeleton::SkeletonRenderPart;
-use crate::animations::skeleton::{IKChain, Joint, PartConnection};
+use crate::animations::skeleton::{AttachPoint, Joint, KinematicChain, PartConnection};
 use crate::handlers::get_camera;
 use crate::landscapes::QuadNode::QuadNode;
 use crate::landscapes::TerrainManager::TerrainManager;
@@ -367,7 +367,8 @@ impl RendererState {
     pub fn step_animations_pipeline(&mut self, queue: &wgpu::Queue) {
         for animation in &mut self.active_animations {
             // TODO: pass only relevant parts
-            update_skeleton_animation(&mut self.skeleton_parts, animation, queue);
+            // update_skeleton_animation(&mut self.skeleton_parts, animation, queue);
+            animation.update(&mut self.skeleton_parts, queue);
         }
     }
 
@@ -988,7 +989,8 @@ impl RendererState {
         partComponentId: &String,
         position: [f32; 3],
         joints: Vec<Joint>,
-        ik_chains: Vec<IKChain>,
+        k_chains: Vec<KinematicChain>,
+        attach_points: Vec<AttachPoint>,
         joint_positions: &HashMap<String, Point3<f32>>,
         // joint_rotations: &HashMap<String, Vector3<f32>>,
         connection: Option<PartConnection>,
@@ -998,7 +1000,8 @@ impl RendererState {
             device,
             &self.model_bind_group_layout,
             joints,
-            ik_chains,
+            k_chains,
+            attach_points,
             joint_positions,
             // joint_rotations,
             position,
