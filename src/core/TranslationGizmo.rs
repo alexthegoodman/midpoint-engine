@@ -1,3 +1,4 @@
+use floem::common::rgb_to_wgpu;
 use nalgebra::{self as na, vector, Matrix4, Vector3};
 use rapier3d::{
     math::Point,
@@ -146,10 +147,14 @@ impl AxisArrow {
         let segments = 8;
 
         // Arrow colors
+        let red = rgb_to_wgpu(239, 95, 61, 1.0);
+        let green = rgb_to_wgpu(173, 240, 70, 1.0);
+        let blue = rgb_to_wgpu(62, 113, 240, 1.0);
+
         let color = match axis {
-            0 => [1.0, 0.0, 0.0], // X axis: red
-            1 => [0.0, 1.0, 0.0], // Y axis: green
-            _ => [0.0, 0.0, 1.0], // Z axis: blue
+            0 => [red[0], red[1], red[2]],       // X axis: red
+            1 => [green[0], green[1], green[2]], // Y axis: green
+            _ => [blue[0], blue[1], blue[2]],    // Z axis: blue
         };
 
         // Create shaft vertices at both ends

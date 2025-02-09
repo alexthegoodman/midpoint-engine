@@ -326,7 +326,7 @@ impl RendererState {
             translation_gizmo,
             rotation_gizmo,
             scale_gizmo,
-            active_gizmo: "translation".to_string(),
+            active_gizmo: "translate".to_string(),
 
             gravity: vector![0.0, -9.81, 0.0],
             integration_parameters,
