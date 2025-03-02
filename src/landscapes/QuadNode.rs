@@ -644,7 +644,7 @@ impl QuadNode {
 
         let mesh_id = Uuid::new_v4().to_string();
 
-        println!("terrain_position {:?}", terrain_position);
+        // println!("terrain_position {:?}", terrain_position);
 
         let calc_res = Self::get_resolution_for_depth(depth);
 
@@ -1041,7 +1041,7 @@ impl QuadNode {
             .map(|info| info.vertex.clone())
             .collect();
 
-        println!("vertices length {:?}", vertices.len());
+        // println!("vertices length {:?}", vertices.len());
 
         let vertex_lookup: HashMap<(i32, i32), usize> = merged_vertex_info
             .iter()
@@ -1199,7 +1199,7 @@ impl QuadNode {
                 sender.send((chunk_id, collider)).unwrap();
             });
         } else {
-            println!("no collider {:?}", depth);
+            // println!("no collider {:?}", depth);
         }
 
         let rigid_time = Instant::now();

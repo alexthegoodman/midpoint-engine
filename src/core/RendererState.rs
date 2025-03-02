@@ -364,6 +364,51 @@ impl RendererState {
         }
     }
 
+    pub fn is_player_grounded(
+        // renderer_state: &MutexGuard<RendererState>,
+        &self,
+        player_handle: RigidBodyHandle,
+    ) -> bool {
+        const GROUND_CHECK_DISTANCE: f32 = 10.0; // Small distance to check below the player
+
+        // Get player position
+        let player_rb = match self.rigid_body_set.get(player_handle) {
+            Some(rb) => rb,
+            None => return false,
+        };
+
+        let player_pos = player_rb.translation();
+
+        // Create a ray from the player's position downward
+        let ray_origin = point![player_pos.x, player_pos.y, player_pos.z];
+        let ray_direction = vector![0.0, -1.0, 0.0];
+
+        // Create the ray
+        let ray = Ray::new(ray_origin, ray_direction);
+
+        // Set up query pipeline if it's not already part of your system
+        // This is a simplified version; you might need to adapt to your architecture
+        let rigidbody_set = &self.rigid_body_set;
+        let collider_set = &self.collider_set;
+        let query_pipeline = &self.query_pipeline;
+
+        // Perform the raycast
+        if let Some((handle, intersection)) = query_pipeline.cast_ray(
+            rigidbody_set,
+            collider_set,
+            &ray,
+            GROUND_CHECK_DISTANCE,
+            true,
+            QueryFilter::default().exclude_rigid_body(player_handle),
+        ) {
+            // Ray hit something, player is grounded
+            return true;
+        }
+
+        // No hit, player is not grounded
+        false
+    }
+
     pub fn step_animations_pipeline(&mut self, queue: &wgpu::Queue) {
         for animation in &mut self.active_animations {
             // TODO: pass only relevant parts

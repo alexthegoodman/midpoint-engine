@@ -117,7 +117,7 @@ impl PlayerCharacter {
             model: None,
             character_controller: KinematicCharacterController {
                 autostep: Some(CharacterAutostep {
-                    max_height: rapier3d::control::CharacterLength::Relative((20.0)), // helps with jagged terrain?
+                    max_height: rapier3d::control::CharacterLength::Relative((40.0)), // helps with jagged terrain?
                     min_width: rapier3d::control::CharacterLength::Relative((2.0)),
                     include_dynamic_bodies: true,
                 }),

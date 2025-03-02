@@ -252,26 +252,43 @@ impl GameState {
             .lock()
             .unwrap();
         const MOVE_SPEED: f32 = 20.0;
+        const JUMP_FORCE: f32 = 10.0;
 
         if is_pressed {
             if let Some(rb_handle) = renderer_state.player_character.movement_rigid_body_handle {
-                if let Some(rb) = renderer_state.rigid_body_set.get_mut(rb_handle) {
-                    let camera = get_camera();
-                    let movement = match key_code {
-                        "w" => camera.direction,
-                        "s" => -camera.direction,
-                        "a" => -camera.direction.cross(&camera.up).normalize(),
-                        "d" => camera.direction.cross(&camera.up).normalize(),
-                        _ => return,
-                    };
+                if key_code == "Space" || key_code == " " {
+                    // First check if player is grounded
+                    let is_grounded = renderer_state.is_player_grounded(rb_handle);
 
-                    // Apply movement through physics system
-                    let movement = movement * MOVE_SPEED;
-                    // Keep vertical velocity (for gravity/jumping)
-                    let mut linvel = rb.linvel().clone();
-                    linvel.x = movement.x;
-                    linvel.z = movement.z;
-                    rb.set_linvel(linvel, true);
+                    println!("is_grounded {:?}", is_grounded);
+
+                    // Then get the rigid body if needed
+                    if is_grounded {
+                        if let Some(rb) = renderer_state.rigid_body_set.get_mut(rb_handle) {
+                            let mut linvel = rb.linvel().clone();
+                            linvel.y = JUMP_FORCE;
+                            rb.set_linvel(linvel, true);
+                        }
+                    }
+                } else {
+                    if let Some(rb) = renderer_state.rigid_body_set.get_mut(rb_handle) {
+                        let camera = get_camera();
+                        let movement = match key_code {
+                            "w" => camera.direction,
+                            "s" => -camera.direction,
+                            "a" => -camera.direction.cross(&camera.up).normalize(),
+                            "d" => camera.direction.cross(&camera.up).normalize(),
+                            _ => return,
+                        };
+
+                        // Apply movement through physics system
+                        let movement = movement * MOVE_SPEED;
+                        // Keep vertical velocity (for gravity/jumping)
+                        let mut linvel = rb.linvel().clone();
+                        linvel.x = movement.x;
+                        linvel.z = movement.z;
+                        rb.set_linvel(linvel, true);
+                    }
                 }
             }
         }

@@ -323,12 +323,12 @@ pub fn add_physics_components_mini(
             let rigid_body_handle = rigid_body_set.insert(rigid_body); // No clone needed
             quad.rigid_body_handle = Some(rigid_body_handle);
 
-            println!(
-                "Actual rigid_body world position: {:?}",
-                rigid_body_set.get(rigid_body_handle).unwrap().position()
-            );
+            // println!(
+            //     "Actual rigid_body world position: {:?}",
+            //     rigid_body_set.get(rigid_body_handle).unwrap().position()
+            // );
 
-            println!("landscape collider insert_with_parent");
+            // println!("landscape collider insert_with_parent");
 
             let collider_handle =
                 collider_set.insert_with_parent(collider, rigid_body_handle, rigid_body_set);
@@ -337,7 +337,7 @@ pub fn add_physics_components_mini(
             if let Some(collider) = collider_set.get(collider_handle) {
                 // Access the collider here
                 let position = collider.position();
-                println!("Collider position: {:?}", position);
+                // println!("Collider position: {:?}", position);
                 if let Some(debug_mesh) = create_debug_collision_mesh(&collider, device, position) {
                     quad.debug_mesh = Some(debug_mesh);
                 }
@@ -446,19 +446,19 @@ pub fn create_debug_collision_mesh(
             // Add vertices with random UV coordinates
             // ideally, make + 452.0 dynamic with terrain position
             vertices.push(Vertex {
-                position: [tri_a.x, tri_a.y + 452.0, tri_a.z],
+                position: [tri_a.x, tri_a.y + 352.0, tri_a.z],
                 normal: [0.0, 1.0, 0.0],
                 tex_coords: random_uv, // Use the same random UV for all vertices
                 color: [1.0, 1.0, 1.0], // Default white color since we're using UVs for color
             });
             vertices.push(Vertex {
-                position: [tri_b.x, tri_b.y + 452.0, tri_b.z],
+                position: [tri_b.x, tri_b.y + 352.0, tri_b.z],
                 normal: [0.0, 1.0, 0.0],
                 tex_coords: random_uv,
                 color: [1.0, 1.0, 1.0],
             });
             vertices.push(Vertex {
-                position: [tri_c.x, tri_c.y + 452.0, tri_c.z],
+                position: [tri_c.x, tri_c.y + 352.0, tri_c.z],
                 normal: [0.0, 1.0, 0.0],
                 tex_coords: random_uv,
                 color: [1.0, 1.0, 1.0],
