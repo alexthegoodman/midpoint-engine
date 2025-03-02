@@ -15,7 +15,7 @@ use crate::core::PlayerCharacter::PlayerCharacter;
 use crate::core::Texture::Texture;
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
 use crate::handlers::{get_camera, Vertex};
-use crate::helpers::landscapes::get_landscape_pixels;
+use crate::helpers::landscapes::{get_landscape_pixels, LandscapePixelData};
 use crate::helpers::saved_data::LandscapeTextureKinds;
 use crate::landscapes::LandscapeLOD::{add_physics_components_mini, Rect};
 
@@ -29,7 +29,8 @@ pub struct TerrainManager {
     pub id: String,
     pub terrain_position: [f32; 3],
     pub root: QuadNode,
-    pub height_data: Vec<f32>,
+    // pub height_data: Vec<f32>,
+    pub landscape_data: LandscapePixelData,
     pub transform: Transform,
 
     pub bind_group: wgpu::BindGroup,
@@ -59,7 +60,7 @@ impl TerrainManager {
         // let square_size = 1024.0 * 100.0;
         // let square_height = 1858.0 * 10.0;
         let square_size = 1024.0 * 4.0;
-        let square_height = 150.0 * 4.0;
+        // let square_height = 150.0 * 4.0;
         let data = get_landscape_pixels(projectId, landscapeAssetId, landscapeFilename);
 
         println!("loaded heights... creating root quad...");
@@ -85,7 +86,7 @@ impl TerrainManager {
                 x: -(square_size / 2.0) + terrain_position[0],
                 z: -(square_size / 2.0) + terrain_position[2],
             },
-            &data.raw_heights,
+            &data,
             16, // Base resolution
             device,
             terrain_position,
@@ -119,7 +120,8 @@ impl TerrainManager {
             id: landscapeComponentId.clone(),
             terrain_position,
             root,
-            height_data: data.raw_heights,
+            // height_data: data.raw_heights,
+            landscape_data: data,
             transform: Transform::new(
                 Vector3::new(
                     terrain_position[0],
@@ -240,7 +242,8 @@ impl TerrainManager {
             // Update LOD structure
             let lod_changed = self.root.update_lod(
                 camera_pos,
-                &self.height_data,
+                // &self.height_data,
+                &self.landscape_data,
                 &lod_distances,
                 MAX_LOD_LEVELS as u32,
                 device,

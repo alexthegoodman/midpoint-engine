@@ -80,18 +80,35 @@ impl PlayerCharacter {
     pub fn new() -> Self {
         let id = Uuid::new_v4();
 
+        // let movement_collider = ColliderBuilder::capsule_y(0.5, 1.0)
+        //     .friction(0.0)
+        //     .restitution(0.0)
+        //     .density(1.0) // Add density to give it mass
+        //     .user_data(id.as_u128())
+        //     .active_collision_types(ActiveCollisionTypes::all()) // Make sure ALL collision types are enabled
+        //     .build();
+
+        // let dynamic_body = RigidBodyBuilder::dynamic()
+        //     .additional_mass(70.0) // Explicitly set mass (e.g., 70kg for a person)
+        //     .linear_damping(0.1)
+        //     // .ccd_enabled(true)
+        //     .user_data(id.as_u128())
+        //     .build();
+
         let movement_collider = ColliderBuilder::capsule_y(0.5, 1.0)
-            .friction(0.0)
+            .friction(0.7) // Add significant friction (was 0.0)
             .restitution(0.0)
-            .density(1.0) // Add density to give it mass
+            .density(1.0)
             .user_data(id.as_u128())
-            .active_collision_types(ActiveCollisionTypes::all()) // Make sure ALL collision types are enabled
+            .active_collision_types(ActiveCollisionTypes::all())
             .build();
 
         let dynamic_body = RigidBodyBuilder::dynamic()
-            .additional_mass(70.0) // Explicitly set mass (e.g., 70kg for a person)
-            .linear_damping(0.1)
-            // .ccd_enabled(true)
+            .additional_mass(70.0)
+            .linear_damping(0.4) // Increase damping (was 0.1)
+            .angular_damping(0.9) // Add angular damping to prevent excessive rotation
+            .ccd_enabled(true) // Enable Continuous Collision Detection for fast movement
+            .lock_rotations() // Prevent character from tipping over
             .user_data(id.as_u128())
             .build();
 
@@ -100,8 +117,8 @@ impl PlayerCharacter {
             model: None,
             character_controller: KinematicCharacterController {
                 autostep: Some(CharacterAutostep {
-                    max_height: rapier3d::control::CharacterLength::Relative((2.5)), // helps with jagged terrain?
-                    min_width: rapier3d::control::CharacterLength::Relative((2.2)),
+                    max_height: rapier3d::control::CharacterLength::Relative((20.0)), // helps with jagged terrain?
+                    min_width: rapier3d::control::CharacterLength::Relative((2.0)),
                     include_dynamic_bodies: true,
                 }),
                 slide: true,

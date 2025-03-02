@@ -13,6 +13,7 @@ pub struct LandscapePixelData {
     pub pixel_data: Vec<Vec<PixelData>>,
     pub rapier_heights: na::DMatrix<f32>,
     pub raw_heights: Vec<f32>,
+    pub max_height: f32,
 }
 
 #[derive(Serialize)]
@@ -42,6 +43,7 @@ pub fn read_tiff_heightmap(
     Vec<Vec<PixelData>>,
     na::DMatrix<f32>,
     Vec<f32>,
+    f32,
 ) {
     // Added DMatrix return
     let file = File::open(landscape_path).expect("Couldn't open tif file");
@@ -57,7 +59,7 @@ pub fn read_tiff_heightmap(
         .expect("Couldn't read image data from tif")
     {
         DecodingResult::F32(vec) => vec,
-        _ => return (0, 0, Vec::new(), na::DMatrix::zeros(0, 0), Vec::new()),
+        _ => return (0, 0, Vec::new(), na::DMatrix::zeros(0, 0), Vec::new(), 0.0),
     };
 
     println!("Continuing!");
@@ -82,12 +84,16 @@ pub fn read_tiff_heightmap(
         .unwrap();
     let height_range = max_height - min_height;
 
+    let mut max_height_actual: f32 = 0.0;
+
     for y in 0..height {
         let mut row = Vec::new();
         for x in 0..width {
             let idx = (y * width + x) as usize;
             let normalized_height = (image[idx] - min_height) / height_range;
             let height_value = normalized_height * z_scale;
+
+            max_height_actual = max_height_actual.max(height_value);
 
             // Set the height in the DMatrix
             heights[(y, x)] = height_value;
@@ -112,7 +118,14 @@ pub fn read_tiff_heightmap(
 
     println!("Tiff heightmap finished!");
 
-    (width, height, pixel_data, heights, raw_heights)
+    (
+        width,
+        height,
+        pixel_data,
+        heights,
+        raw_heights,
+        max_height_actual,
+    )
 }
 
 pub fn get_landscape_pixels(
@@ -142,7 +155,7 @@ pub fn get_landscape_pixels(
     // let square_height = 1858.0 * 10.0;
     let square_size = 1024.0 * 4.0;
     let square_height = 150.0 * 4.0;
-    let (width, height, pixel_data, rapier_heights, raw_heights) = read_tiff_heightmap(
+    let (width, height, pixel_data, rapier_heights, raw_heights, max_height) = read_tiff_heightmap(
         landscape_path
             .to_str()
             .expect("Couldn't form landscape string"),
@@ -163,6 +176,7 @@ pub fn get_landscape_pixels(
         pixel_data,
         rapier_heights,
         raw_heights,
+        max_height,
     }
 }
 

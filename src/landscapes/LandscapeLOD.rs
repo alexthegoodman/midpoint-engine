@@ -371,7 +371,8 @@ pub fn create_debug_collision_mesh(
     // println!("Is sensor: {:?}", collider.is_sensor());
     println!("Collider parent handle: {:?}", collider.parent());
 
-    if let Some(shape) = collider.shape().as_heightfield() {
+    // if let Some(shape) = collider.shape().as_heightfield() {
+    if let Some(shape) = collider.shape().as_trimesh() {
         // Cast a ray from above the heightfield straight down
         // let start = Point3::new(0.0, 100.0, 0.0);
         // let direction = Vector3::new(0.0, 1.0, 0.0);
@@ -443,20 +444,21 @@ pub fn create_debug_collision_mesh(
             // let tri_c = triangle.c;
 
             // Add vertices with random UV coordinates
+            // ideally, make + 452.0 dynamic with terrain position
             vertices.push(Vertex {
-                position: [tri_a.x, tri_a.y, tri_a.z],
+                position: [tri_a.x, tri_a.y + 452.0, tri_a.z],
                 normal: [0.0, 1.0, 0.0],
                 tex_coords: random_uv, // Use the same random UV for all vertices
                 color: [1.0, 1.0, 1.0], // Default white color since we're using UVs for color
             });
             vertices.push(Vertex {
-                position: [tri_b.x, tri_b.y, tri_b.z],
+                position: [tri_b.x, tri_b.y + 452.0, tri_b.z],
                 normal: [0.0, 1.0, 0.0],
                 tex_coords: random_uv,
                 color: [1.0, 1.0, 1.0],
             });
             vertices.push(Vertex {
-                position: [tri_c.x, tri_c.y, tri_c.z],
+                position: [tri_c.x, tri_c.y + 452.0, tri_c.z],
                 normal: [0.0, 1.0, 0.0],
                 tex_coords: random_uv,
                 color: [1.0, 1.0, 1.0],

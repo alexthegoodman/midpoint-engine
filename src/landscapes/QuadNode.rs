@@ -16,7 +16,7 @@ use wgpu::*;
 use crate::core::Texture::Texture;
 use crate::core::Transform::{matrix4_to_raw_array, Transform};
 use crate::handlers::{get_camera, Vertex};
-use crate::helpers::landscapes::get_landscape_pixels;
+use crate::helpers::landscapes::{get_landscape_pixels, LandscapePixelData};
 use crate::helpers::saved_data::LandscapeTextureKinds;
 use crate::landscapes::LandscapeLOD::{calculate_normals, sample_height_world, MAX_LOD_LEVELS};
 use crate::landscapes::TerrainManager::calculate_lod_distances;
@@ -64,7 +64,8 @@ impl QuadNode {
     pub fn new(
         parent_bounds: Rect,
         bounds: Rect,
-        height_data: &[f32],
+        // height_data: &[f32],
+        landscape_data: &LandscapePixelData,
         resolution: u32,
         device: &Device,
         terrain_position: [f32; 3],
@@ -80,7 +81,8 @@ impl QuadNode {
             mesh: Some(Self::create_mesh(
                 &parent_bounds.clone(),
                 &bounds.clone(),
-                height_data,
+                // height_data,
+                landscape_data,
                 resolution,
                 device,
                 terrain_position,
@@ -179,7 +181,8 @@ impl QuadNode {
 
     pub fn split(
         &mut self,
-        height_data: &[f32],
+        // height_data: &[f32],
+        landscape_data: &LandscapePixelData,
         max_depth: u32,
         device: &Device,
         terrain_position: [f32; 3],
@@ -214,7 +217,8 @@ impl QuadNode {
                         width: half_width,
                         height: half_height,
                     },
-                    height_data,
+                    // height_data,
+                    landscape_data,
                     16,
                     device,
                     terrain_position,
@@ -248,7 +252,8 @@ impl QuadNode {
                         width: half_width,
                         height: half_height,
                     },
-                    height_data,
+                    // height_data,
+                    landscape_data,
                     16,
                     device,
                     terrain_position,
@@ -282,7 +287,8 @@ impl QuadNode {
                         width: half_width,
                         height: half_height,
                     },
-                    height_data,
+                    // height_data,
+                    landscape_data,
                     16,
                     device,
                     terrain_position,
@@ -316,7 +322,8 @@ impl QuadNode {
                         width: half_width,
                         height: half_height,
                     },
-                    height_data,
+                    // height_data,
+                    landscape_data,
                     16,
                     device,
                     terrain_position,
@@ -340,7 +347,8 @@ impl QuadNode {
     pub fn update_lod(
         &mut self,
         camera_pos: [f32; 3],
-        height_data: &[f32],
+        // height_data: &[f32],
+        landscape_data: &LandscapePixelData,
         lod_distances: &Vec<f32>,
         max_depth: u32,
         device: &Device,
@@ -360,7 +368,7 @@ impl QuadNode {
             self.depth,
         );
 
-        println!("should_split {:?} {:?}", self.depth, should_split);
+        // println!("should_split {:?} {:?}", self.depth, should_split);
 
         let had_children = self.children.is_some();
         let mut state_changed = false;
@@ -369,7 +377,8 @@ impl QuadNode {
             // Create children if we don't have them
             if !had_children {
                 self.split(
-                    height_data,
+                    // height_data,
+                    landscape_data,
                     max_depth,
                     device,
                     terrain_position,
@@ -424,7 +433,8 @@ impl QuadNode {
                 for child in children.iter_mut() {
                     if child.update_lod(
                         camera_pos,
-                        height_data,
+                        // height_data,
+                        landscape_data,
                         lod_distances,
                         max_depth,
                         device,
@@ -588,24 +598,6 @@ impl QuadNode {
 impl QuadNode {
     // Maybe something like this for resolution calculation
     pub fn get_resolution_for_depth(depth: u32) -> u32 {
-        // Example scaling:
-        // depth 0 (root) -> 16
-        // depth 1 -> 32
-        // depth 2 -> 64
-        // depth 3 -> 128
-        // depth 4 -> 256
-        // match depth {
-        //     0 => 16,
-        //     1 => 32,
-        //     2 => 64,
-        //     3 => 128,
-        //     4 => 256,
-        //     5 => 512,
-        //     6 => 1024,
-        //     7 => 2048,
-        //     8 => 4096,
-        //     _ => 16,
-        // }
         // medium range?
         // match depth {
         //     0 => 16,
@@ -632,25 +624,13 @@ impl QuadNode {
             8 => 32,
             _ => 16,
         }
-        // very low quality
-        // match depth {
-        //     0 => 4,
-        //     1 => 8,
-        //     2 => 16,
-        //     3 => 32,
-        //     4 => 64,
-        //     5 => 128,
-        //     6 => 256,
-        //     7 => 512,
-        //     8 => 1024,
-        //     _ => 16,
-        // }
     }
 
     pub fn create_mesh(
         parent_bounds: &Rect,
         bounds: &Rect,
-        height_data: &[f32],
+        // height_data: &[f32],
+        landscape_data: &LandscapePixelData,
         edge_resolution: u32,
         device: &Device,
         terrain_position: [f32; 3],
@@ -659,23 +639,22 @@ impl QuadNode {
         collider_sender: Sender<ColliderMessage>,
         corner: &str,
     ) -> TerrainMesh {
+        let height_data = &landscape_data.raw_heights;
         let mesh_time = Instant::now();
 
         let mesh_id = Uuid::new_v4().to_string();
 
-        // println!("chunk_id {:?}", mesh_id);
+        println!("terrain_position {:?}", terrain_position);
 
         let calc_res = Self::get_resolution_for_depth(depth);
 
         // Create a matrix to store heights for Rapier
+        // add 3 to account for overlap heights for crack healing?
+        // let mut height_matrix =
+        //     nalgebra::DMatrix::zeros(calc_res as usize + 3, calc_res as usize + 3);
         let mut height_matrix = nalgebra::DMatrix::zeros(calc_res as usize, calc_res as usize);
         let terrain_width = (height_data.len() as f32).sqrt() as f32;
         let terrain_half_width = terrain_width / 2.0;
-
-        // println!(
-        //     "width calc {:?} {:?} {:?}",
-        //     terrain_width, edge_resolution, calc_res
-        // );
 
         let camera = get_camera();
         // println!("create mesh, cam pos: {:?}", camera.position);
@@ -795,6 +774,7 @@ impl QuadNode {
 
             // Update height matrix for edge position
             // height_matrix[(0, i as usize)] = height + (terrain_position[1] / 2.0);
+            // height_matrix[(0, i as usize)] = height;
 
             edge_vertex_info.push(VertexInfo {
                 vertex: Vertex {
@@ -831,6 +811,7 @@ impl QuadNode {
 
             // Update height matrix for edge position
             // height_matrix[(calc_res - 1, i as usize)] = height + (terrain_position[1] / 2.0);
+            // height_matrix[(calc_res as usize - 1, i as usize)] = height;
 
             edge_vertex_info.push(VertexInfo {
                 vertex: Vertex {
@@ -960,13 +941,8 @@ impl QuadNode {
         let height_diff = max_height - min_height;
         let height_scale = height_diff / 600.0;
 
-        // println!(
-        //     "height diff with 600.0: {:?} {:?}",
-        //     height_diff, height_scale
-        // );
-
-        let overlap_distance = 0.15;
-        let proximity_threshold = 1.0; // Adjust based on your vertex spacing
+        let overlap_distance = 0.5;
+        let proximity_threshold = 10.0; // Adjust based on your vertex spacing
 
         let mut extended_edge_vertex_info: Vec<VertexInfo> = Vec::new();
 
@@ -1020,34 +996,36 @@ impl QuadNode {
 
         let extended_length = extended_edge_vertex_info.len();
 
-        // Pre-calculate all related overlaps outside the loop
-        // let mut related_overlaps = Vec::new();
-        // let base_vertex_count = edge_vertex_info.len();
-        // for idx in base_vertex_count..extended_length {
-        //     let vertex = &extended_edge_vertex_info[idx];
-        //     related_overlaps.push((idx, vertex.edge_index, vertex.vertex.position));
-        // }
-
         let mut merged_vertex_info: Vec<VertexInfo> = Vec::new();
         let mut used_grid_positions: HashSet<(i32, i32)> = HashSet::new();
-
-        // println!(
-        //     "extended_edge_vertex_info {:?}",
-        //     extended_edge_vertex_info.len()
-        // );
 
         // Add extended vertices if their grid position isn't taken
         for vertex in &extended_edge_vertex_info {
             if !used_grid_positions.contains(&vertex.grid_pos) {
                 used_grid_positions.insert(vertex.grid_pos);
                 merged_vertex_info.push(vertex.clone());
+
+                // Update height matrix with overlap vertices
+                // if vertex.grid_pos.0 + 1 >= 0
+                //     && vertex.grid_pos.1 + 1 >= 0
+                //     && vertex.grid_pos.0 + 1 < calc_res as i32 + 3
+                //     && vertex.grid_pos.1 + 1 < calc_res as i32 + 3
+                // {
+                //     height_matrix[(
+                //         vertex.grid_pos.1 as usize + 1,
+                //         vertex.grid_pos.0 as usize + 1,
+                //     )] = vertex.vertex.position[1];
+                //     println!(
+                //         "Updated height matrix at ({}, {}) with height {}",
+                //         vertex.grid_pos.0, vertex.grid_pos.1, vertex.vertex.position[1]
+                //     );
+                // } else {
+                //     println!(
+                //         "Couldn't update height matrix at ({}, {}) with height {}",
+                //         vertex.grid_pos.0, vertex.grid_pos.1, vertex.vertex.position[1]
+                //     );
+                // }
             }
-            //  else {
-            //     println!(
-            //         "edge grid position taken frome extended! {:?}",
-            //         vertex.grid_pos
-            //     );
-            // }
         }
 
         // Add interior vertices if their grid position isn't taken
@@ -1063,7 +1041,6 @@ impl QuadNode {
             .map(|info| info.vertex.clone())
             .collect();
 
-        println!("height: {:?} {:?}", vertices[1].position[1], max_height);
         println!("vertices length {:?}", vertices.len());
 
         let vertex_lookup: HashMap<(i32, i32), usize> = merged_vertex_info
@@ -1113,32 +1090,6 @@ impl QuadNode {
 
         calculate_normals(cloned_vertices, &indices);
 
-        // let mut vertices: Vec<Vertex> = Vec::new();
-        // let mut indices = Vec::new();
-
-        // // Final mesh validation
-        // let final_vertex_count = vertices.len();
-        // let final_index_count = indices.len();
-        // let indices_per_vertex = final_index_count as f32 / final_vertex_count as f32;
-
-        // // For internal vertices: exactly 6 indices each (3 quads * 2 triangles)
-        // // For edge vertices: 4 indices each (2 quads * 2 triangles)
-        // // For corner vertices: 2 indices each (1 quad * 2 triangles)
-        // // Can calculate expected total based on your mesh structure
-
-        // assert!(
-        //     indices_per_vertex <= 6.0,
-        //     "Too many indices per vertex: {}. Should never exceed 6.0 for a quad mesh",
-        //     indices_per_vertex
-        // );
-
-        // println!("Mesh validation passed:");
-        // println!("Vertices: {}", final_vertex_count);
-        // println!("Indices: {}", final_index_count);
-        // println!("Indices per vertex: {:.2}", indices_per_vertex);
-
-        // println!("adding buffers");
-
         // Create vertex buffer
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Terrain Vertex Buffer"),
@@ -1153,50 +1104,26 @@ impl QuadNode {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let isometry = Isometry3::translation(
-            terrain_position[0],
-            terrain_position[1],
-            terrain_position[2],
-        );
-
-        let closest_dist =
-            get_camera_distance_from_bound_center_rel(bounds.clone(), terrain_position).sqrt();
-
-        // println!("closest_dist {:?}", closest_dist);
-
-        let mesh_duration = mesh_time.elapsed();
-        // println!("  mesh_duration: {:?}", mesh_duration);
-
-        let lod_distances = calculate_lod_distances();
-
-        let should_split = if depth < MAX_LOD_LEVELS as u32 {
-            should_split(
-                [camera.position.x, camera.position.y, camera.position.z],
-                &lod_distances,
-                terrain_position,
-                bounds.clone(),
-                depth,
-            )
-        } else {
-            false
-        };
-        // let should_split = if depth == MAX_LOD_LEVELS as u32 {
-        //     false
-        // } else {
-        //     true
-        // };
-
-        // TODO: set to reasonable amount
-        // if (closest_dist < PHYSICS_DISTANCE && !should_split) {
-        // if (!should_split) {
         let sender = collider_sender.clone();
-        let vertices = rapier_vertices.clone();
+        let rapier_vertices = rapier_vertices.clone();
+
+        let new_rapier_vertices = cloned_vertices
+            .iter()
+            .map(|v| Point3::new(v.position[0], v.position[1], v.position[2]))
+            .collect();
+
         let indices_clone = indices.clone();
         let chunk_id = mesh_id.clone();
         let heights = height_matrix.clone();
-        // let translation = vector![-bounds.x / 2.0, -220.0, -bounds.z / 2.0];
 
-        // let translation = vector![-bounds.width / 2.0, -220.0, -bounds.height / 2.0];
+        // let height_proportion = max_height / landscape_data.max_height;
+
+        // println!(
+        //     "max heights: {:?} {:?} proportion: {:?}",
+        //     max_height, landscape_data.max_height, height_proportion
+        // );
+
+        let scaling_adjustment = 10.0;
 
         let scaling: nalgebra::Matrix<
             f32,
@@ -1204,40 +1131,33 @@ impl QuadNode {
             nalgebra::Const<1>,
             nalgebra::ArrayStorage<f32, 3, 1>,
         > = vector![
-            bounds.width as f32,
-            1.0, // Height scale // values are 1-to-1
-            // height_scale,
-            bounds.height as f32
+            bounds.width as f32 + scaling_adjustment,
+            // height_proportion, // Height scale // values are 1-to-1
+            1.0,
+            bounds.height as f32 + scaling_adjustment
         ];
 
-        // let isometry = Isometry3::translation(bounds.x, 0.0, bounds.z);
+        // for heightfield
+        // let isometry = match corner {
+        //     // bounds.x and bounds.z already adjusted for width and height when creating QuadNode
+        //     "top_left" => Isometry3::translation(bounds.x, -450.0, bounds.z), // why ~500? map specific? max_height is about 600
+        //     "top_right" => Isometry3::translation(bounds.x, -450.0, bounds.z),
+        //     "bottom_left" => Isometry3::translation(bounds.x, -450.0, bounds.z),
+        //     "bottom_right" => Isometry3::translation(bounds.x, -450.0, bounds.z),
+        //     _ => Isometry3::translation(
+        //         terrain_position[0],
+        //         terrain_position[1],
+        //         terrain_position[2],
+        //     ),
+        // };
 
+        // for trimesh
         let isometry = match corner {
-            // "top_left" => Isometry3::translation(
-            //     bounds.x + -bounds.width / 2.0,
-            //     -500.0,
-            //     bounds.z + -bounds.height / 2.0,
-            // ),
-            // "top_right" => Isometry3::translation(
-            //     bounds.x + bounds.width / 2.0,
-            //     -500.0,
-            //     bounds.z + -bounds.height / 2.0,
-            // ),
-            // "bottom_left" => Isometry3::translation(
-            //     bounds.x + -bounds.width / 2.0,
-            //     -500.0,
-            //     bounds.z + bounds.height / 2.0,
-            // ),
-            // "bottom_right" => Isometry3::translation(
-            //     bounds.x + bounds.width / 2.0,
-            //     -500.0,
-            //     bounds.z + bounds.height / 2.0,
-            // ),
             // bounds.x and bounds.z already adjusted for width and height when creating QuadNode
-            "top_left" => Isometry3::translation(bounds.x, -460.0, bounds.z), // why ~500? map specific? max_height is about 600
-            "top_right" => Isometry3::translation(bounds.x, -460.0, bounds.z),
-            "bottom_left" => Isometry3::translation(bounds.x, -460.0, bounds.z),
-            "bottom_right" => Isometry3::translation(bounds.x, -460.0, bounds.z),
+            "top_left" => Isometry3::translation(0.0, -450.0, 0.0), // why ~500? map specific? max_height is about 600
+            "top_right" => Isometry3::translation(0.0, -450.0, 0.0),
+            "bottom_left" => Isometry3::translation(0.0, -450.0, 0.0),
+            "bottom_right" => Isometry3::translation(0.0, -450.0, 0.0),
             _ => Isometry3::translation(
                 terrain_position[0],
                 terrain_position[1],
@@ -1245,56 +1165,35 @@ impl QuadNode {
             ),
         };
 
-        // let translation = match corner {
-        //     "top_left" => {
-        //         vector![-bounds.width, -220.0, -bounds.height]
-        //     }
-        //     "top_right" => {
-        //         vector![bounds.width, -220.0, -bounds.height]
-        //     }
-        //     "bottom_left" => {
-        //         vector![-bounds.width, -220.0, bounds.height]
-        //     }
-        //     "bottom_right" => {
-        //         vector![bounds.width, -220.0, bounds.height]
-        //     }
-        //     _ => {
-        //         vector![0.0, 0.0, 0.0]
-        //     }
-        // };
-
-        // println!(
-        //     "spawning collider {:?} {:?} {:?}",
-        //     isometry, bounds.width, bounds.height
-        // );
-
         // only create colliders for nearest children to prevent overlap
         if (depth == (MAX_LOD_LEVELS as u32) - 1) {
             // Spawn the heavy computation in a separate thread
             std::thread::spawn(move || {
-                // let collider = ColliderBuilder::trimesh(
-                //     vertices,
-                //     indices_clone
-                //         .chunks(3)
-                //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-                //         .collect::<Vec<[u32; 3]>>(),
-                // )
-                // .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
-                // .build();
+                let collider = ColliderBuilder::trimesh(
+                    new_rapier_vertices,
+                    indices_clone
+                        .chunks(3)
+                        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+                        .collect::<Vec<[u32; 3]>>(),
+                )
+                .friction(0.9)
+                .restitution(0.1)
+                .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
+                .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
+                .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
+                .build();
 
-                let collider = ColliderBuilder::heightfield(heights.clone(), scaling)
-                    .friction(0.9)
-                    .restitution(0.1)
-                    // .position(isometry)
-                    // .translation(translation)
-                    .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
-                    .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
-                    .user_data(
-                        Uuid::from_str(&chunk_id)
-                            .expect("Couldn't extract uuid")
-                            .as_u128(),
-                    )
-                    .build();
+                // let collider = ColliderBuilder::heightfield(heights.clone(), scaling)
+                //     .friction(0.9)
+                //     .restitution(0.1)
+                //     .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
+                //     .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
+                //     .user_data(
+                //         Uuid::from_str(&chunk_id)
+                //             .expect("Couldn't extract uuid")
+                //             .as_u128(),
+                //     )
+                //     .build();
 
                 // Send the completed collider back
                 sender.send((chunk_id, collider)).unwrap();
@@ -1303,23 +1202,10 @@ impl QuadNode {
             println!("no collider {:?}", depth);
         }
 
-        // Create the ground as a fixed rigid body
-
-        // println!(
-        //     "insert landscape rigidbody position {:?} {:?} {:?}",
-        //     depth, bounds, terrain_position
-        // );
-
         let rigid_time = Instant::now();
-
-        // println!(
-        //     "Corner: {}, Final isometry: x={}, y={}, z={}",
-        //     corner, isometry.translation.x, isometry.translation.y, isometry.translation.z
-        // );
 
         let ground_rigid_body = RigidBodyBuilder::fixed()
             .position(isometry)
-            // .translation(translation)
             .user_data(
                 Uuid::from_str(&mesh_id)
                     .expect("Couldn't extract uuid")
@@ -1329,7 +1215,6 @@ impl QuadNode {
             .build();
 
         let rigid_duration = rigid_time.elapsed();
-        // println!("  rigid_duration: {:?}", rigid_duration);
 
         TerrainMesh {
             mesh_id,
@@ -1340,30 +1225,6 @@ impl QuadNode {
             rigid_body: Some(ground_rigid_body),
             depth,
         }
-        // } else {
-        //     // println!("not addressing most physics");
-
-        //     let ground_rigid_body = RigidBodyBuilder::fixed()
-        //         .position(isometry)
-        //         // .translation(translation)
-        //         .user_data(
-        //             Uuid::from_str(&mesh_id)
-        //                 .expect("Couldn't extract uuid")
-        //                 .as_u128(),
-        //         )
-        //         .sleeping(false)
-        //         .build();
-
-        //     TerrainMesh {
-        //         mesh_id,
-        //         vertex_buffer,
-        //         index_buffer,
-        //         index_count: indices.clone().len() as u32,
-        //         collider: None,
-        //         rigid_body: Some(ground_rigid_body),
-        //         depth,
-        //     }
-        // }
     }
 }
 
