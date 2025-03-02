@@ -828,7 +828,7 @@ impl RendererState {
         );
 
         // test npcs
-        self.npcs.push(NPC::new(model.id.clone()));
+        // self.npcs.push(NPC::new(model.id.clone()));
 
         self.models.push(model);
     }

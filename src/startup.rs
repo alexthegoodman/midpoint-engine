@@ -27,8 +27,8 @@ use nalgebra::Isometry;
 use uuid::Uuid;
 // use views::app::app_view;
 // use winit::{event_loop, window};
-use floem::reactive::SignalGet;
 use floem::reactive::SignalUpdate;
+use floem::reactive::{RwSignal, SignalGet};
 use rapier3d::prelude::*;
 use wgpu::util::DeviceExt;
 
@@ -452,9 +452,11 @@ use tokio::net::TcpListener;
 // Define the function type that creates a view
 pub async fn start<F, V>(app_view: F, project_id: String)
 where
-    F: Fn(Arc<Mutex<GpuHelper>>, Arc<Mutex<Viewport>>) -> V + 'static,
+    F: Fn(RwSignal<bool>, Arc<Mutex<GameState>>, Arc<Mutex<GpuHelper>>, Arc<Mutex<Viewport>>) -> V
+        + 'static,
     V: IntoView + 'static,
 {
+    let game_ready = RwSignal::new(false);
     let app = Application::new();
 
     // Get the primary monitor's size
@@ -498,12 +500,16 @@ where
     let viewport_3 = Arc::clone(&viewport);
     let viewport_4 = Arc::clone(&viewport);
 
+    let game_state_cloned = Arc::clone(&game_state);
+
     let (mut app, window_id) = app.window(
         move |_| {
             app_view(
                 // Arc::clone(&editor_state),
                 // Arc::clone(&editor),
                 // Arc::clone(&state_helper),
+                game_ready,
+                Arc::clone(&game_state_cloned),
                 Arc::clone(&gpu_helper),
                 Arc::clone(&viewport),
                 // Arc::clone(&manager),
@@ -958,6 +964,9 @@ where
                     gpu_helper: Some(gpu_cloned),
                     depth_view: None,
                 });
+
+                game_ready.set(true);
+
                 println!("Done with setup!");
             }
             .await;
@@ -1184,8 +1193,8 @@ pub fn restore_renderer_from_saved(
             );
 
             drop(renderer_state_guard);
-
-            println!("Finished restoring!");
         }
     });
+
+    println!("Finished restoring!");
 }
