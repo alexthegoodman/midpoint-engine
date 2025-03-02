@@ -28,11 +28,25 @@ pub struct Rect {
     pub height: f32,
 }
 
-pub const PHYSICS_DISTANCE: f32 = 1000.0;
-// Constants for LOD configuration
+// pub const PHYSICS_DISTANCE: f32 = 1000.0;
+// pub const MAX_LOD_LEVELS: usize = 6;
+// pub const BASE_LOD_DISTANCE: f32 = 1000.0; // Distance for first LOD transition
+// pub const LOD_DISTANCE_MULTIPLIER: f32 = 0.5; // Each level shows more detail at half the distance
+
+pub const PHYSICS_DISTANCE: f32 = 16_777_216.0; // (if 4096 is 1024 resolution, 4 units apart for each vertex, then this should give some room)
 pub const MAX_LOD_LEVELS: usize = 6;
-pub const BASE_LOD_DISTANCE: f32 = 1000.0; // Distance for first LOD transition
-pub const LOD_DISTANCE_MULTIPLIER: f32 = 0.5; // Each level shows more detail at half the distance
+pub const BASE_LOD_DISTANCE: f32 = 16_777_216.0; // Distance for first LOD transition
+pub const LOD_DISTANCE_MULTIPLIER: f32 = 0.25; // Each level shows more detail at half the distance 16777216
+
+// pub const PHYSICS_DISTANCE: f32 = 1_049_600.0; // (if 4096 is 1024 resolution, 4 units apart for each vertex, then this should give some room)
+// pub const MAX_LOD_LEVELS: usize = 6;
+// pub const BASE_LOD_DISTANCE: f32 = 1_049_600.0; // Distance for first LOD transition
+// pub const LOD_DISTANCE_MULTIPLIER: f32 = 0.5; // Each level shows more detail at half the distance
+
+// pub const PHYSICS_DISTANCE: f32 = 65_536.0; // useful for testing shorter distances
+// pub const MAX_LOD_LEVELS: usize = 6;
+// pub const BASE_LOD_DISTANCE: f32 = 65_536.0; // Distance for first LOD transition
+// pub const LOD_DISTANCE_MULTIPLIER: f32 = 0.5; // Each level shows more detail at half the distance
 
 // Helper function to calculate vertex normals
 pub fn calculate_normals(vertices: &mut Vec<Vertex>, indices: &Vec<u32>) {

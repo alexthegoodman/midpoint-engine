@@ -359,6 +359,9 @@ impl QuadNode {
             self.bounds.clone(),
             self.depth,
         );
+
+        println!("should_split {:?} {:?}", self.depth, should_split);
+
         let had_children = self.children.is_some();
         let mut state_changed = false;
 
@@ -374,49 +377,66 @@ impl QuadNode {
                     collider_sender.clone(),
                 );
                 state_changed = true;
-            }
 
-            // Find the closest child and only split that one
-            if let Some(ref mut children) = self.children {
-                // Calculate distances to each child's center
-                let mut closest_idx = 0;
-                let mut min_distance = f32::MAX;
+                // Find the closest child and only split that one
+                if let Some(ref mut children) = self.children {
+                    // Calculate distances to each child's center
+                    let mut closest_idx = 0;
+                    let mut min_distance = f32::MAX;
 
-                // TODO: split all children if should_split is true?
+                    // TODO: split all children if should_split is true?
 
-                for (idx, child) in children.iter().enumerate() {
-                    let child_center = [
-                        terrain_position[0] + child.bounds.x + child.bounds.width / 2.0,
-                        terrain_position[1],
-                        terrain_position[2] + child.bounds.z + child.bounds.height / 2.0,
-                    ];
-                    let dist = distance_squared(camera_pos, child_center);
-                    if dist < min_distance {
-                        min_distance = dist;
-                        closest_idx = idx;
+                    // for (idx, child) in children.iter().enumerate() {
+                    //     let child_center = [
+                    //         terrain_position[0] + child.bounds.x + child.bounds.width / 2.0,
+                    //         terrain_position[1],
+                    //         terrain_position[2] + child.bounds.z + child.bounds.height / 2.0,
+                    //     ];
+                    //     let dist = distance_squared(camera_pos, child_center);
+                    //     if dist < min_distance {
+                    //         min_distance = dist;
+                    //         closest_idx = idx;
+                    //     }
+                    // }
+
+                    // // Only update the closest child
+                    // if children[closest_idx].update_lod(
+                    //     camera_pos,
+                    //     height_data,
+                    //     lod_distances,
+                    //     max_depth,
+                    //     device,
+                    //     terrain_position,
+                    //     landscape_component_id.clone(),
+                    //     collider_sender.clone(),
+                    // ) {
+                    //     state_changed = true;
+                    // }
+
+                    // // Merge other children if they have subdivisions
+                    // for (idx, child) in children.iter_mut().enumerate() {
+                    //     if idx != closest_idx && child.children.is_some() {
+                    //         child.children = None;
+                    //         state_changed = true;
+                    //     }
+                    // }
+
+                    for child in children.iter_mut() {
+                        if child.update_lod(
+                            camera_pos,
+                            height_data,
+                            lod_distances,
+                            max_depth,
+                            device,
+                            terrain_position,
+                            landscape_component_id.clone(),
+                            collider_sender.clone(),
+                        ) {
+                            state_changed = true;
+                        }
                     }
-                }
 
-                // Only update the closest child
-                if children[closest_idx].update_lod(
-                    camera_pos,
-                    height_data,
-                    lod_distances,
-                    max_depth,
-                    device,
-                    terrain_position,
-                    landscape_component_id.clone(),
-                    collider_sender.clone(),
-                ) {
-                    state_changed = true;
-                }
-
-                // Merge other children if they have subdivisions
-                for (idx, child) in children.iter_mut().enumerate() {
-                    if idx != closest_idx && child.children.is_some() {
-                        child.children = None;
-                        state_changed = true;
-                    }
+                    // TODO: merge old unused children?
                 }
             }
         } else if had_children {
@@ -588,16 +608,29 @@ impl QuadNode {
         //     _ => 16,
         // }
         // medium range?
+        // match depth {
+        //     0 => 16,
+        //     1 => 16,
+        //     2 => 16,
+        //     3 => 32,
+        //     4 => 32,
+        //     5 => 32,
+        //     6 => 64,
+        //     7 => 64,
+        //     8 => 64,
+        //     _ => 16,
+        // }
+        // optimized range?
         match depth {
-            0 => 16,
-            1 => 16,
-            2 => 16,
-            3 => 32,
-            4 => 32,
+            0 => 4,
+            1 => 4,
+            2 => 8,
+            3 => 16,
+            4 => 16,
             5 => 32,
-            6 => 64,
-            7 => 64,
-            8 => 64,
+            6 => 32,
+            7 => 32,
+            8 => 32,
             _ => 16,
         }
         // very low quality
@@ -1352,13 +1385,13 @@ pub fn should_split(
     let closest_dist =
         get_camera_distance_from_bound_center_rel(bounds.clone(), transform_position);
 
-    // Calculate node size (diagonal)
-    let node_size = (bounds.width * bounds.width + bounds.height * bounds.height).sqrt();
+    // // Calculate node size (diagonal)
+    // let node_size = (bounds.width * bounds.width + bounds.height * bounds.height).sqrt();
 
-    // Calculate view-dependent error metric
-    // Split if we're close to any part of the node relative to its size
-    let error_threshold = node_size * 0.5; // Adjust this factor to control split aggressiveness
-    let should_split = closest_dist < (lod_distances[depth as usize] * error_threshold).powi(2);
+    // // Calculate view-dependent error metric
+    // // Split if we're close to any part of the node relative to its size
+    // let error_threshold = node_size * 0.5; // Adjust this factor to control split aggressiveness
+    // let should_split = closest_dist < (lod_distances[depth as usize] * error_threshold).powi(2);
 
     // println!(
     //     "Depth: {}, Node size: {:.2}, Closest dist: {:.2}, Threshold: {:.2}, Split: {}",
@@ -1368,6 +1401,8 @@ pub fn should_split(
     //     lod_distances[self.depth as usize] * error_threshold,
     //     should_split
     // );
+
+    let should_split = closest_dist < lod_distances[depth as usize];
 
     should_split
 }
