@@ -377,67 +377,66 @@ impl QuadNode {
                     collider_sender.clone(),
                 );
                 state_changed = true;
+            }
+            // Find the closest child and only split that one
+            if let Some(ref mut children) = self.children {
+                // Calculate distances to each child's center
+                let mut closest_idx = 0;
+                let mut min_distance = f32::MAX;
 
-                // Find the closest child and only split that one
-                if let Some(ref mut children) = self.children {
-                    // Calculate distances to each child's center
-                    let mut closest_idx = 0;
-                    let mut min_distance = f32::MAX;
+                // TODO: split all children if should_split is true?
 
-                    // TODO: split all children if should_split is true?
+                // for (idx, child) in children.iter().enumerate() {
+                //     let child_center = [
+                //         terrain_position[0] + child.bounds.x + child.bounds.width / 2.0,
+                //         terrain_position[1],
+                //         terrain_position[2] + child.bounds.z + child.bounds.height / 2.0,
+                //     ];
+                //     let dist = distance_squared(camera_pos, child_center);
+                //     if dist < min_distance {
+                //         min_distance = dist;
+                //         closest_idx = idx;
+                //     }
+                // }
 
-                    // for (idx, child) in children.iter().enumerate() {
-                    //     let child_center = [
-                    //         terrain_position[0] + child.bounds.x + child.bounds.width / 2.0,
-                    //         terrain_position[1],
-                    //         terrain_position[2] + child.bounds.z + child.bounds.height / 2.0,
-                    //     ];
-                    //     let dist = distance_squared(camera_pos, child_center);
-                    //     if dist < min_distance {
-                    //         min_distance = dist;
-                    //         closest_idx = idx;
-                    //     }
-                    // }
+                // // Only update the closest child
+                // if children[closest_idx].update_lod(
+                //     camera_pos,
+                //     height_data,
+                //     lod_distances,
+                //     max_depth,
+                //     device,
+                //     terrain_position,
+                //     landscape_component_id.clone(),
+                //     collider_sender.clone(),
+                // ) {
+                //     state_changed = true;
+                // }
 
-                    // // Only update the closest child
-                    // if children[closest_idx].update_lod(
-                    //     camera_pos,
-                    //     height_data,
-                    //     lod_distances,
-                    //     max_depth,
-                    //     device,
-                    //     terrain_position,
-                    //     landscape_component_id.clone(),
-                    //     collider_sender.clone(),
-                    // ) {
-                    //     state_changed = true;
-                    // }
+                // // Merge other children if they have subdivisions
+                // for (idx, child) in children.iter_mut().enumerate() {
+                //     if idx != closest_idx && child.children.is_some() {
+                //         child.children = None;
+                //         state_changed = true;
+                //     }
+                // }
 
-                    // // Merge other children if they have subdivisions
-                    // for (idx, child) in children.iter_mut().enumerate() {
-                    //     if idx != closest_idx && child.children.is_some() {
-                    //         child.children = None;
-                    //         state_changed = true;
-                    //     }
-                    // }
-
-                    for child in children.iter_mut() {
-                        if child.update_lod(
-                            camera_pos,
-                            height_data,
-                            lod_distances,
-                            max_depth,
-                            device,
-                            terrain_position,
-                            landscape_component_id.clone(),
-                            collider_sender.clone(),
-                        ) {
-                            state_changed = true;
-                        }
+                for child in children.iter_mut() {
+                    if child.update_lod(
+                        camera_pos,
+                        height_data,
+                        lod_distances,
+                        max_depth,
+                        device,
+                        terrain_position,
+                        landscape_component_id.clone(),
+                        collider_sender.clone(),
+                    ) {
+                        state_changed = true;
                     }
-
-                    // TODO: merge old unused children?
                 }
+
+                // TODO: merge old unused children?
             }
         } else if had_children {
             self.children = None;
@@ -1064,7 +1063,7 @@ impl QuadNode {
             .map(|info| info.vertex.clone())
             .collect();
 
-        println!("height: {:?}", vertices[1].position[1]);
+        println!("height: {:?} {:?}", vertices[1].position[1], max_height);
         println!("vertices length {:?}", vertices.len());
 
         let vertex_lookup: HashMap<(i32, i32), usize> = merged_vertex_info
@@ -1214,42 +1213,31 @@ impl QuadNode {
         // let isometry = Isometry3::translation(bounds.x, 0.0, bounds.z);
 
         let isometry = match corner {
-            "top_left" => {
-                // vector![-bounds.width, -220.0, -bounds.height]
-                Isometry3::translation(-bounds.width / 2.0, -500.0, -bounds.height / 2.0)
-                // Isometry3::translation(
-                //     bounds.x,
-                //     terrain_position[1],
-                //     bounds.z,
-                // )
-            }
-            "top_right" => {
-                // vector![bounds.width, -220.0, -bounds.height]
-                Isometry3::translation(bounds.width / 2.0, -500.0, -bounds.height / 2.0)
-                // Isometry3::translation(
-                //     bounds.x,
-                //     terrain_position[1],
-                //     bounds.z,
-                // )
-            }
-            "bottom_left" => {
-                // vector![-bounds.width, -220.0, bounds.height]
-                Isometry3::translation(-bounds.width / 2.0, -500.0, bounds.height / 2.0)
-                // Isometry3::translation(
-                //     bounds.x
-                //     terrain_position[1],
-                //     bounds.z,
-                // )
-            }
-            "bottom_right" => {
-                // vector![bounds.width, -220.0, bounds.height]
-                Isometry3::translation(bounds.width / 2.0, -500.0, bounds.height / 2.0)
-                // Isometry3::translation(
-                //     bounds.x,
-                //     terrain_position[1],
-                //     bounds.z,
-                // )
-            }
+            // "top_left" => Isometry3::translation(
+            //     bounds.x + -bounds.width / 2.0,
+            //     -500.0,
+            //     bounds.z + -bounds.height / 2.0,
+            // ),
+            // "top_right" => Isometry3::translation(
+            //     bounds.x + bounds.width / 2.0,
+            //     -500.0,
+            //     bounds.z + -bounds.height / 2.0,
+            // ),
+            // "bottom_left" => Isometry3::translation(
+            //     bounds.x + -bounds.width / 2.0,
+            //     -500.0,
+            //     bounds.z + bounds.height / 2.0,
+            // ),
+            // "bottom_right" => Isometry3::translation(
+            //     bounds.x + bounds.width / 2.0,
+            //     -500.0,
+            //     bounds.z + bounds.height / 2.0,
+            // ),
+            // bounds.x and bounds.z already adjusted for width and height when creating QuadNode
+            "top_left" => Isometry3::translation(bounds.x, -460.0, bounds.z), // why ~500? map specific? max_height is about 600
+            "top_right" => Isometry3::translation(bounds.x, -460.0, bounds.z),
+            "bottom_left" => Isometry3::translation(bounds.x, -460.0, bounds.z),
+            "bottom_right" => Isometry3::translation(bounds.x, -460.0, bounds.z),
             _ => Isometry3::translation(
                 terrain_position[0],
                 terrain_position[1],
@@ -1257,58 +1245,63 @@ impl QuadNode {
             ),
         };
 
-        let translation = match corner {
-            "top_left" => {
-                vector![-bounds.width, -220.0, -bounds.height]
-            }
-            "top_right" => {
-                vector![bounds.width, -220.0, -bounds.height]
-            }
-            "bottom_left" => {
-                vector![-bounds.width, -220.0, bounds.height]
-            }
-            "bottom_right" => {
-                vector![bounds.width, -220.0, bounds.height]
-            }
-            _ => {
-                vector![0.0, 0.0, 0.0]
-            }
-        };
+        // let translation = match corner {
+        //     "top_left" => {
+        //         vector![-bounds.width, -220.0, -bounds.height]
+        //     }
+        //     "top_right" => {
+        //         vector![bounds.width, -220.0, -bounds.height]
+        //     }
+        //     "bottom_left" => {
+        //         vector![-bounds.width, -220.0, bounds.height]
+        //     }
+        //     "bottom_right" => {
+        //         vector![bounds.width, -220.0, bounds.height]
+        //     }
+        //     _ => {
+        //         vector![0.0, 0.0, 0.0]
+        //     }
+        // };
 
         // println!(
         //     "spawning collider {:?} {:?} {:?}",
         //     isometry, bounds.width, bounds.height
         // );
 
-        // Spawn the heavy computation in a separate thread
-        std::thread::spawn(move || {
-            // let collider = ColliderBuilder::trimesh(
-            //     vertices,
-            //     indices_clone
-            //         .chunks(3)
-            //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-            //         .collect::<Vec<[u32; 3]>>(),
-            // )
-            // .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
-            // .build();
+        // only create colliders for nearest children to prevent overlap
+        if (depth == (MAX_LOD_LEVELS as u32) - 1) {
+            // Spawn the heavy computation in a separate thread
+            std::thread::spawn(move || {
+                // let collider = ColliderBuilder::trimesh(
+                //     vertices,
+                //     indices_clone
+                //         .chunks(3)
+                //         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+                //         .collect::<Vec<[u32; 3]>>(),
+                // )
+                // .user_data(Uuid::from_str(&chunk_id).unwrap().as_u128())
+                // .build();
 
-            let collider = ColliderBuilder::heightfield(heights.clone(), scaling)
-                .friction(0.9)
-                .restitution(0.1)
-                // .position(isometry)
-                // .translation(translation)
-                .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
-                .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
-                .user_data(
-                    Uuid::from_str(&chunk_id)
-                        .expect("Couldn't extract uuid")
-                        .as_u128(),
-                )
-                .build();
+                let collider = ColliderBuilder::heightfield(heights.clone(), scaling)
+                    .friction(0.9)
+                    .restitution(0.1)
+                    // .position(isometry)
+                    // .translation(translation)
+                    .solver_groups(InteractionGroups::all()) // Make sure collision groups are set
+                    .active_collision_types(ActiveCollisionTypes::all()) // Enable all collision types
+                    .user_data(
+                        Uuid::from_str(&chunk_id)
+                            .expect("Couldn't extract uuid")
+                            .as_u128(),
+                    )
+                    .build();
 
-            // Send the completed collider back
-            sender.send((chunk_id, collider)).unwrap();
-        });
+                // Send the completed collider back
+                sender.send((chunk_id, collider)).unwrap();
+            });
+        } else {
+            println!("no collider {:?}", depth);
+        }
 
         // Create the ground as a fixed rigid body
 

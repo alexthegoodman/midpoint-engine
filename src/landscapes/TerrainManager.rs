@@ -135,7 +135,7 @@ impl TerrainManager {
             texture_array_view: None,
             texture_bind_group: None,
             lod_update_timer: 0.0,
-            lod_update_interval: 2.0, // Configure as needed
+            lod_update_interval: 0.5, // Configure as needed
             collider_sender: sender.clone(),
             collider_receiver: receiver,
         }
