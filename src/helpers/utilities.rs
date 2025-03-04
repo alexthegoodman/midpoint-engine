@@ -30,6 +30,42 @@ pub fn get_project_dir(project_id: &str) -> Option<PathBuf> {
     Some(project_dir)
 }
 
+pub fn get_heightmap_dir(project_id: &str, landscape_id: &str) -> Option<PathBuf> {
+    let project_dir = get_project_dir(project_id).expect("Couldn't get project directory");
+    let landscape_dir = project_dir.join("landscapes").join(landscape_id);
+    let heightmap_dir = landscape_dir.join("heightmaps");
+
+    fs::create_dir_all(&heightmap_dir)
+        .ok()
+        .expect("Couldn't check or create Heightmaps directory");
+
+    Some(heightmap_dir)
+}
+
+pub fn get_soilmap_dir(project_id: &str, landscape_id: &str) -> Option<PathBuf> {
+    let project_dir = get_project_dir(project_id).expect("Couldn't get project directory");
+    let landscape_dir = project_dir.join("landscapes").join(landscape_id);
+    let heightmap_dir = landscape_dir.join("soils");
+
+    fs::create_dir_all(&heightmap_dir)
+        .ok()
+        .expect("Couldn't check or create Soils directory");
+
+    Some(heightmap_dir)
+}
+
+pub fn get_rockmap_dir(project_id: &str, landscape_id: &str) -> Option<PathBuf> {
+    let project_dir = get_project_dir(project_id).expect("Couldn't get project directory");
+    let landscape_dir = project_dir.join("landscapes").join(landscape_id);
+    let heightmap_dir = landscape_dir.join("rockmaps");
+
+    fs::create_dir_all(&heightmap_dir)
+        .ok()
+        .expect("Couldn't check or create Rockmaps directory");
+
+    Some(heightmap_dir)
+}
+
 pub fn load_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::error::Error>> {
     let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let project_dir = sync_dir.join("midpoint/projects").join(project_id);
