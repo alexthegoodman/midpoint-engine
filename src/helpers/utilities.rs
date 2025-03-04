@@ -66,6 +66,17 @@ pub fn get_rockmap_dir(project_id: &str, landscape_id: &str) -> Option<PathBuf> 
     Some(heightmap_dir)
 }
 
+pub fn get_textures_dir(project_id: &str) -> Option<PathBuf> {
+    let project_dir = get_project_dir(project_id).expect("Couldn't get project directory");
+    let textures_dir = project_dir.join("textures");
+
+    fs::create_dir_all(&textures_dir)
+        .ok()
+        .expect("Couldn't check or create Textures directory");
+
+    Some(textures_dir)
+}
+
 pub fn load_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::error::Error>> {
     let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let project_dir = sync_dir.join("midpoint/projects").join(project_id);

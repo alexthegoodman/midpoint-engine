@@ -144,10 +144,10 @@ pub fn get_landscape_pixels(
         "midpoint/projects/{}/landscapes/{}/heightmaps",
         projectId, landscapeAssetId
     ));
-    // let landscape_path = landscapes_dir.join(landscapeFilename);
-    let landscape_path = landscapes_dir
-        .join("upscaled")
-        .join("upscaled_heightmap.tiff");
+    let landscape_path = landscapes_dir.join(landscapeFilename);
+    // let landscape_path = landscapes_dir
+    //     .join("upscaled")
+    //     .join("upscaled_heightmap.tiff");
 
     println!("landscape_path {:?}", landscape_path);
 
@@ -194,8 +194,8 @@ pub fn read_landscape_texture(
 
     let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let texture_path = sync_dir.join(format!(
-        "midpoint/projects/{}/textures/{}",
-        projectId, textureFilename
+        "midpoint/projects/{}/textures/{}{}",
+        projectId, textureFilename, ".png"
     ));
 
     // Read the image file
