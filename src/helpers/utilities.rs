@@ -2,8 +2,9 @@ use std::{fs, path::PathBuf};
 
 use directories::{BaseDirs, UserDirs};
 use nalgebra::Matrix4;
+use uuid::Uuid;
 
-use super::saved_data::SavedState;
+use super::saved_data::{LevelData, SavedState};
 
 pub fn get_common_os_dir() -> Option<PathBuf> {
     UserDirs::new().map(|user_dirs| {
@@ -52,12 +53,20 @@ pub fn load_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::e
 pub fn create_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::error::Error>> {
     let project_dir = get_project_dir(project_id).expect("Couldn't get project directory");
 
+    let empty_level = LevelData {
+        id: Uuid::new_v4().to_string(),
+        components: Some(Vec::new()),
+    };
+
+    let mut levels = Vec::new();
+    levels.push(empty_level);
+
     let empty_saved_state = SavedState {
         concepts: Vec::new(),
         models: Vec::new(),
         landscapes: Some(Vec::new()),
         textures: Some(Vec::new()),
-        levels: Some(Vec::new()),
+        levels: Some(levels),
         skeleton_parts: Vec::new(),
         skeletons: Vec::new(),
         motion_paths: Vec::new(),
