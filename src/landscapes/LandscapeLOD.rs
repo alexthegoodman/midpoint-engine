@@ -369,7 +369,7 @@ pub fn create_debug_collision_mesh(
     // );
     // println!("Heightfield solver groups: {:?}", collider.solver_groups());
     // println!("Is sensor: {:?}", collider.is_sensor());
-    println!("Collider parent handle: {:?}", collider.parent());
+    // println!("Collider parent handle: {:?}", collider.parent());
 
     // if let Some(shape) = collider.shape().as_heightfield() {
     if let Some(shape) = collider.shape().as_trimesh() {

@@ -18,6 +18,17 @@ pub fn get_common_os_dir() -> Option<PathBuf> {
     })
 }
 
+pub fn get_project_dir(project_id: &str) -> Option<PathBuf> {
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
+    let project_dir = sync_dir.join("midpoint/projects").join(project_id);
+
+    fs::create_dir_all(&project_dir)
+        .ok()
+        .expect("Couldn't check or create Projects directory");
+
+    Some(project_dir)
+}
+
 pub fn load_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::error::Error>> {
     let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let project_dir = sync_dir.join("midpoint/projects").join(project_id);
@@ -38,16 +49,22 @@ pub fn load_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::e
     Ok(state)
 }
 
-// pub fn nalgebra_to_gizmo_matrix(mat: Matrix4<f32>) -> RowMatrix4<f64> {
-//     // Convert to f64 and transpose since transform-gizmo expects row-major format
-//     let mut result = [[0.0; 4]; 4];
+pub fn create_project_state(project_id: &str) -> Result<SavedState, Box<dyn std::error::Error>> {
+    let project_dir = get_project_dir(project_id).expect("Couldn't get project directory");
 
-//     for i in 0..4 {
-//         for j in 0..4 {
-//             // nalgebra is column-major, so we transpose during conversion
-//             result[i][j] = mat[(j, i)] as f64;
-//         }
-//     }
+    let empty_saved_state = SavedState {
+        concepts: Vec::new(),
+        models: Vec::new(),
+        landscapes: Some(Vec::new()),
+        textures: Some(Vec::new()),
+        levels: Some(Vec::new()),
+        skeleton_parts: Vec::new(),
+        skeletons: Vec::new(),
+        motion_paths: Vec::new(),
+    };
 
-//     RowMatrix4::from(result)
-// }
+    let json = serde_json::to_string_pretty(&empty_saved_state)?;
+    fs::write(project_dir.join("midpoint.json"), json)?;
+
+    Ok(empty_saved_state)
+}
