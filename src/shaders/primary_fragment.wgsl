@@ -28,13 +28,15 @@ fn main(in: FragmentInput) -> @location(0) vec4<f32> {
 
     // Blend textures based on normalized weights
     let final_color = primary.rgb * primary_weight + 
-                      rockmap.rgb * rockmap_weight + 
-                      soil.rgb * soil_weight;
+                    rockmap.rgb * rockmap_weight + 
+                    soil.rgb * soil_weight;
 
-    // return vec4<f32>(final_color, 1.0);
-    
-    if (renderMode == 1) { // Assume 1 means rendering texture
+    if (renderMode == 1) { // Rendering terrain texture
         return vec4<f32>(final_color, 1.0); // Texture rendering
+    } else if (renderMode == 2) {
+        let reg_primary = textureSample(t_diffuse, s_diffuse, in.tex_coords, 0);
+
+        return vec4<f32>(reg_primary.rgb, 1.0);
     } else {
         return vec4(in.color, 1.0); // Color mode
     }

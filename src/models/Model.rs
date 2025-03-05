@@ -68,69 +68,80 @@ impl Model {
         println!("Textures count: {:?}", gltf.textures().len());
 
         let mut textures = Vec::new();
-        for texture in gltf.textures() {
-            match texture.source().source() {
-                gltf::image::Source::View { view, mime_type: _ } => {
-                    let img_data = &buffer_data[view.offset()..view.offset() + view.length()];
-                    let img = image::load_from_memory(img_data).unwrap().to_rgba8();
-                    let (width, height) = img.dimensions();
 
-                    let size = wgpu::Extent3d {
-                        width,
-                        height,
-                        depth_or_array_layers: 1,
-                    };
+        if (gltf.textures().len() > 0) {
+            for texture in gltf.textures() {
+                match texture.source().source() {
+                    gltf::image::Source::View { view, mime_type: _ } => {
+                        let img_data = &buffer_data[view.offset()..view.offset() + view.length()];
+                        let img = image::load_from_memory(img_data).unwrap().to_rgba8();
+                        let (width, height) = img.dimensions();
 
-                    let texture = device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("GLB Texture"),
-                        size,
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                        view_formats: &[],
-                    });
+                        let size = wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        };
 
-                    queue.write_texture(
-                        wgpu::ImageCopyTexture {
-                            texture: &texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        &img,
-                        wgpu::ImageDataLayout {
-                            offset: 0,
-                            bytes_per_row: Some(4 * width), // TODO: is this correct?
-                            rows_per_image: Some(height),
-                        },
-                        size,
-                    );
+                        let texture = device.create_texture(&wgpu::TextureDescriptor {
+                            label: Some("GLB Texture"),
+                            size,
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                                | wgpu::TextureUsages::COPY_DST,
+                            view_formats: &[],
+                        });
 
-                    let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-                        address_mode_u: wgpu::AddressMode::ClampToEdge,
-                        address_mode_v: wgpu::AddressMode::ClampToEdge,
-                        address_mode_w: wgpu::AddressMode::ClampToEdge,
-                        mag_filter: wgpu::FilterMode::Linear,
-                        min_filter: wgpu::FilterMode::Linear,
-                        mipmap_filter: wgpu::FilterMode::Nearest,
-                        ..Default::default()
-                    });
+                        queue.write_texture(
+                            wgpu::ImageCopyTexture {
+                                texture: &texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            &img,
+                            wgpu::ImageDataLayout {
+                                offset: 0,
+                                bytes_per_row: Some(4 * width), // TODO: is this correct?
+                                rows_per_image: Some(height),
+                            },
+                            size,
+                        );
 
-                    textures.push((texture_view, sampler));
-                }
-                gltf::image::Source::Uri { uri, mime_type: _ } => {
-                    panic!(
-                        "External URI image sources are not yet supported in glb files: {}",
-                        uri
-                    );
+                        // let texture_view =
+                        //     texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+                        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
+                            dimension: Some(wgpu::TextureViewDimension::D2Array),
+                            ..Default::default()
+                        });
+
+                        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+                            address_mode_u: wgpu::AddressMode::ClampToEdge,
+                            address_mode_v: wgpu::AddressMode::ClampToEdge,
+                            address_mode_w: wgpu::AddressMode::ClampToEdge,
+                            mag_filter: wgpu::FilterMode::Linear,
+                            min_filter: wgpu::FilterMode::Linear,
+                            mipmap_filter: wgpu::FilterMode::Nearest,
+                            ..Default::default()
+                        });
+
+                        textures.push((texture_view, sampler));
+                    }
+                    gltf::image::Source::Uri { uri, mime_type: _ } => {
+                        panic!(
+                            "External URI image sources are not yet supported in glb files: {}",
+                            uri
+                        );
+                    }
                 }
             }
         }
 
-        // Create a default empty texture and sampler
+        // Create a default empty texture and sampler, only used if no textures
         let default_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Default Empty Texture"),
             size: wgpu::Extent3d {
@@ -181,6 +192,15 @@ impl Model {
                     .map(|v| v.into_f32().collect())
                     .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
 
+                println!(
+                    "first 5 tex_coords {:?} {:?} {:?} {:?} {:?}",
+                    tex_coords[0],
+                    tex_coords[100],
+                    tex_coords[200],
+                    tex_coords[300],
+                    tex_coords[400]
+                );
+
                 let vertices: Vec<Vertex> = positions
                     .zip(normals.iter())
                     .zip(tex_coords.iter())
@@ -205,10 +225,10 @@ impl Model {
                     .map(|iter| iter.into_u32().collect())
                     .unwrap_or_default();
 
-                let indices: Vec<u16> = indices_u32.iter().map(|&i| i as u16).collect();
+                // let indices: Vec<u16> = indices_u32.iter().map(|&i| i as u16).collect();
 
                 println!("Model vertices: {:?}", vertices.len());
-                println!("Model indices: {:?}", indices.len());
+                println!("Model indices: {:?}", indices_u32.len());
 
                 let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Model GLB Vertex Buffer"),
@@ -219,7 +239,7 @@ impl Model {
                 let index_buffer: wgpu::Buffer =
                     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("Model GLB Index Buffer"),
-                        contents: bytemuck::cast_slice(&indices),
+                        contents: bytemuck::cast_slice(&indices_u32),
                         usage: wgpu::BufferUsages::INDEX,
                     });
 
@@ -255,6 +275,14 @@ impl Model {
                         .base_color_texture()
                         .map_or(0, |info| info.texture().index());
                     let (texture_view, sampler) = &textures[texture_index];
+
+                    println!(
+                        "Texture coord set {:?}",
+                        material
+                            .pbr_metallic_roughness()
+                            .base_color_texture()
+                            .map_or(0, |info| info.tex_coord())
+                    );
 
                     device.create_bind_group(&wgpu::BindGroupDescriptor {
                         layout: &texture_bind_group_layout,
@@ -306,7 +334,7 @@ impl Model {
                 // rapier physics and collision detection!
                 let rapier_collider = ColliderBuilder::convex_hull(&rapier_points)
                     .expect("Couldn't create convex hull")
-                    .friction(0.0)
+                    .friction(0.7)
                     .restitution(0.0)
                     .density(1.0)
                     .user_data(
@@ -344,7 +372,7 @@ impl Model {
                     ),
                     vertex_buffer,
                     index_buffer,
-                    index_count: indices.len() as u32,
+                    index_count: indices_u32.len() as u32,
                     bind_group,
                     texture_bind_group,
                     rapier_collider,

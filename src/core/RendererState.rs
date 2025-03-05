@@ -106,6 +106,7 @@ pub struct RendererState {
     // wgpu
     pub model_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     pub texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    pub reg_texture_render_mode_buffer: Arc<wgpu::Buffer>,
     pub texture_render_mode_buffer: Arc<wgpu::Buffer>,
     pub color_render_mode_buffer: Arc<wgpu::Buffer>,
     pub camera_uniform_buffer: Arc<wgpu::Buffer>,
@@ -167,6 +168,7 @@ impl RendererState {
         queue: &wgpu::Queue,
         model_bind_group_layout: Arc<wgpu::BindGroupLayout>,
         texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+        reg_texture_render_mode_buffer: Arc<wgpu::Buffer>,
         texture_render_mode_buffer: Arc<wgpu::Buffer>,
         color_render_mode_buffer: Arc<wgpu::Buffer>,
         camera_uniform_buffer: Arc<wgpu::Buffer>,
@@ -311,6 +313,7 @@ impl RendererState {
             viewport,
             model_bind_group_layout,
             texture_bind_group_layout,
+            reg_texture_render_mode_buffer,
             texture_render_mode_buffer,
             color_render_mode_buffer,
             camera_uniform_buffer,
@@ -867,7 +870,7 @@ impl RendererState {
             queue,
             &self.model_bind_group_layout,
             &self.texture_bind_group_layout,
-            &self.texture_render_mode_buffer,
+            &self.reg_texture_render_mode_buffer,
             &self.color_render_mode_buffer,
             isometry,
         );
