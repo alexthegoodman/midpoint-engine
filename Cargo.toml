@@ -32,6 +32,7 @@ floem-winit = { git = "https://github.com/lapce/winit", rev = "c8d3b8fd6fa4ffd5e
     "rwh_05",
 ] }
 rayon = "1.10.0"
+meshopt = "0.4.1"
 
 [dependencies.gltf]
 features = ["utils"]
