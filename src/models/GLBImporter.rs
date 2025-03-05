@@ -2,8 +2,7 @@ use gltf::Glb;
 use gltf::Gltf;
 use meshopt::{self, SimplifyOptions, VertexDataAdapter};
 use std::fs::File;
-use std::io::Seek;
-use std::io::{BufWriter, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
 use std::path::Path;
 
@@ -35,6 +34,19 @@ struct LODHeader {
     lod_level: u32,   // LOD level (0 = highest detail)
     index_count: u32, // Number of indices
     offset: u64,      // Offset into the index buffer
+}
+
+#[derive(Clone, Debug)]
+pub struct MeshLOD {
+    pub lod_level: u32,
+    pub indices: Vec<u32>,
+    pub index_count: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct LoadedMesh {
+    pub vertices: Vec<Vertex>,
+    pub lods: Vec<MeshLOD>,
 }
 
 struct SavedMesh {
@@ -435,4 +447,243 @@ impl GLBImporter {
 
         Ok(())
     }
+
+    pub fn load_from_binary(file_path: &str) -> Result<Vec<LoadedMesh>, std::io::Error> {
+        // Open file for reading
+        let file = File::open(Path::new(file_path))?;
+        let mut reader = BufReader::new(file);
+
+        // Read file header
+        let mut header_bytes = [0u8; std::mem::size_of::<FileHeader>()];
+        reader.read_exact(&mut header_bytes)?;
+
+        let header =
+            unsafe { std::ptr::read_unaligned(header_bytes.as_ptr() as *const FileHeader) };
+
+        let header_magic = header.magic;
+        let header_version = header.version;
+        let header_mesh_count = header.mesh_count;
+        let header_lod_levels = header.lod_levels;
+
+        // Verify magic number
+        if header_magic != FILE_MAGIC {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Invalid file format: magic number mismatch: found {:x}, expected {:x}",
+                    header_magic, FILE_MAGIC
+                ),
+            ));
+        }
+
+        // Verify version
+        if header_version != HEADER_VERSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Unsupported file version: {}, expected {}",
+                    header_version, HEADER_VERSION
+                ),
+            ));
+        }
+
+        println!(
+            "Loading file with {} meshes, {} LOD levels per mesh",
+            header_mesh_count, header_lod_levels
+        );
+
+        // Load all meshes
+        let mut loaded_meshes = Vec::new();
+
+        for _ in 0..header_mesh_count {
+            // Read mesh header
+            let mut mesh_header_bytes = [0u8; std::mem::size_of::<MeshHeader>()];
+            reader.read_exact(&mut mesh_header_bytes)?;
+
+            let mesh_header = unsafe {
+                std::ptr::read_unaligned(mesh_header_bytes.as_ptr() as *const MeshHeader)
+            };
+
+            let mesh_header_chunk_id = mesh_header.chunk_id;
+            let mesh_header_vertex_count = mesh_header.vertex_count;
+            let mesh_header_lod_count = mesh_header.lod_count;
+
+            // Verify chunk ID
+            if mesh_header_chunk_id != MESH_CHUNK_ID {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "Invalid mesh chunk ID: {:x}, expected {:x}",
+                        mesh_header_chunk_id, MESH_CHUNK_ID
+                    ),
+                ));
+            }
+
+            println!(
+                "Loading mesh with {} vertices and {} LOD levels",
+                mesh_header_vertex_count, mesh_header_lod_count
+            );
+
+            // Read LOD headers
+            let mut lod_headers = Vec::new();
+            for _ in 0..mesh_header_lod_count {
+                let mut lod_header_bytes = [0u8; std::mem::size_of::<LODHeader>()];
+                reader.read_exact(&mut lod_header_bytes)?;
+
+                let lod_header = unsafe {
+                    std::ptr::read_unaligned(lod_header_bytes.as_ptr() as *const LODHeader)
+                };
+
+                lod_headers.push(lod_header);
+            }
+
+            // Read vertex data
+            let mut vertices = Vec::new();
+            for _ in 0..mesh_header_vertex_count {
+                let mut position = [0f32; 3];
+                let mut normal = [0f32; 3];
+                let mut tex_coords = [0f32; 2];
+                let mut color = [0f32; 3];
+
+                // Read position
+                let mut position_bytes = [0u8; std::mem::size_of::<[f32; 3]>()];
+                reader.read_exact(&mut position_bytes)?;
+                position =
+                    unsafe { std::ptr::read_unaligned(position_bytes.as_ptr() as *const [f32; 3]) };
+
+                // Read normal
+                let mut normal_bytes = [0u8; std::mem::size_of::<[f32; 3]>()];
+                reader.read_exact(&mut normal_bytes)?;
+                normal =
+                    unsafe { std::ptr::read_unaligned(normal_bytes.as_ptr() as *const [f32; 3]) };
+
+                // Read texture coordinates
+                let mut tex_coords_bytes = [0u8; std::mem::size_of::<[f32; 2]>()];
+                reader.read_exact(&mut tex_coords_bytes)?;
+                tex_coords = unsafe {
+                    std::ptr::read_unaligned(tex_coords_bytes.as_ptr() as *const [f32; 2])
+                };
+
+                // Read color
+                let mut color_bytes = [0u8; std::mem::size_of::<[f32; 3]>()];
+                reader.read_exact(&mut color_bytes)?;
+                color =
+                    unsafe { std::ptr::read_unaligned(color_bytes.as_ptr() as *const [f32; 3]) };
+
+                vertices.push(Vertex {
+                    position,
+                    normal,
+                    tex_coords,
+                    color,
+                });
+            }
+
+            // Remember indices start for seeking
+            let indices_start_pos = reader.stream_position()?;
+
+            // Read indices for each LOD level
+            let mut lods = Vec::new();
+            for lod_header in &lod_headers {
+                // Seek to correct position in index buffer
+                reader.seek(SeekFrom::Start(indices_start_pos + lod_header.offset))?;
+
+                // Read indices
+                let mut indices = Vec::new();
+                for _ in 0..lod_header.index_count {
+                    let mut index_bytes = [0u8; std::mem::size_of::<u32>()];
+                    reader.read_exact(&mut index_bytes)?;
+                    let index = u32::from_ne_bytes(index_bytes);
+                    indices.push(index);
+                }
+
+                lods.push(MeshLOD {
+                    lod_level: lod_header.lod_level,
+                    indices,
+                    index_count: lod_header.index_count,
+                });
+            }
+
+            // Sort LODs by level (just to be safe)
+            lods.sort_by_key(|lod| lod.lod_level);
+
+            // Add loaded mesh
+            loaded_meshes.push(LoadedMesh { vertices, lods });
+
+            // Seek to end of this mesh chunk to prepare for next mesh
+            let mesh_end_pos = indices_start_pos
+                + lod_headers
+                    .last()
+                    .map(|h| h.offset + h.index_count as u64 * 4)
+                    .unwrap_or(0);
+            reader.seek(SeekFrom::Start(mesh_end_pos))?;
+        }
+
+        println!(
+            "Successfully loaded {} meshes from: {}",
+            loaded_meshes.len(),
+            file_path
+        );
+
+        Ok(loaded_meshes)
+    }
+
+    // // Helper function to get specific LOD level from a loaded mesh
+    // pub fn get_lod(mesh: &LoadedMesh, desired_lod: u32) -> Option<&MeshLOD> {
+    //     mesh.lods.iter().find(|lod| lod.lod_level == desired_lod)
+    // }
+
+    // // Helper function to get the best LOD level for a given distance
+    // pub fn get_lod_for_distance(mesh: &LoadedMesh, distance: f32, base_distance: f32) -> &MeshLOD {
+    //     // Calculate which LOD to use based on distance
+    //     // The formula is: LOD level = floor(log2(distance / base_distance))
+    //     // where base_distance is the distance at which LOD 0 is used
+
+    //     if distance <= base_distance {
+    //         // Use highest detail LOD (level 0)
+    //         return Self::get_lod(mesh, 0).unwrap_or(&mesh.lods[0]);
+    //     }
+
+    //     let ratio = distance / base_distance;
+    //     let ideal_lod = (ratio.log2()).floor() as u32;
+
+    //     // Find the closest available LOD level that doesn't exceed our calculated level
+    //     let mut available_lods: Vec<&MeshLOD> = mesh.lods.iter().collect();
+    //     available_lods.sort_by_key(|lod| lod.lod_level);
+
+    //     // Find the best LOD that doesn't exceed our ideal LOD
+    //     for lod in available_lods.iter().rev() {
+    //         if lod.lod_level <= ideal_lod {
+    //             return lod;
+    //         }
+    //     }
+
+    //     // If we can't find a suitable LOD, return the lowest detail one
+    //     available_lods.last().unwrap()
+    // }
 }
+
+// Example usage function
+// pub fn example_usage() -> Result<(), std::io::Error> {
+//     // Import GLB and save to binary
+//     let bytes = std::fs::read("your_model.glb").expect("Failed to read GLB file");
+//     GLBImporter::import(&bytes, "output_model.bin")?;
+
+//     // Later, load the model from binary file
+//     let loaded_meshes = GLBImporter::load_from_binary("output_model.bin")?;
+
+//     // Access a specific mesh and its LODs
+//     if !loaded_meshes.is_empty() {
+//         let mesh = &loaded_meshes[0];
+
+//         // Get highest detail LOD (level 0)
+//         let highest_lod = GLBImporter::get_lod(mesh, 0).unwrap();
+//         println!("Highest LOD has {} indices", highest_lod.index_count);
+
+//         // Get LOD for a specific distance (e.g., 100 units away, with base distance of 10)
+//         let distance_lod = GLBImporter::get_lod_for_distance(mesh, 100.0, 10.0);
+//         println!("At distance 100, using LOD level {} with {} indices",
+//                  distance_lod.lod_level, distance_lod.index_count);
+//     }
+
+//     Ok(())
+// }
