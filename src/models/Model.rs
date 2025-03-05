@@ -65,7 +65,7 @@ impl Model {
 
         let uses_textures = gltf.textures().len().gt(&0);
 
-        // web_sys::console::log_1(&format!("Textures count: {:?}", gltf.textures().len()).into());
+        println!("Textures count: {:?}", gltf.textures().len());
 
         let mut textures = Vec::new();
         for texture in gltf.textures() {
@@ -207,8 +207,8 @@ impl Model {
 
                 let indices: Vec<u16> = indices_u32.iter().map(|&i| i as u16).collect();
 
-                // web_sys::console::log_1(&format!("Model vertices: {:?}", vertices.len()).into());
-                // web_sys::console::log_1(&format!("Model indices: {:?}", indices.len()).into());
+                println!("Model vertices: {:?}", vertices.len());
+                println!("Model indices: {:?}", indices.len());
 
                 let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Model GLB Vertex Buffer"),
