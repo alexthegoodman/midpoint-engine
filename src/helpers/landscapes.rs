@@ -59,6 +59,10 @@ pub fn read_tiff_heightmap(
         .expect("Couldn't read image data from tif")
     {
         DecodingResult::F32(vec) => vec,
+        DecodingResult::U16(vec) => {
+            // Convert u16 to f32 if needed
+            vec.into_iter().map(|v| v as f32).collect()
+        }
         _ => return (0, 0, Vec::new(), na::DMatrix::zeros(0, 0), Vec::new(), 0.0),
     };
 

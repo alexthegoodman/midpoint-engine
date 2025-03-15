@@ -390,6 +390,11 @@ pub fn handle_add_landscape_texture(
 ) {
     pause_rendering();
 
+    println!(
+        "Adding texture and mask {:?} {:?}",
+        texture_filename, mask_filename
+    );
+
     // let state = get_renderer_state();
 
     // Clone the values that need to be moved into the closure

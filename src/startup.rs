@@ -1053,6 +1053,8 @@ pub fn restore_renderer_from_saved(
                 .find(|l| l.id == component.asset_id)
                 .expect("Couldn't find landscape asset");
 
+            println!("Add landscape terrain... {:?}", position);
+
             handle_add_landscape(
                 renderer_state.clone(),
                 &gpu_resources.device,
@@ -1068,8 +1070,6 @@ pub fn restore_renderer_from_saved(
                     .clone(),
                 position,
             );
-
-            println!("onward...");
 
             // restore generic properties like position
             // let mut renderer_state_guard = renderer_state.lock().unwrap();
@@ -1136,6 +1136,8 @@ pub fn restore_renderer_from_saved(
                     })
                     .expect("Couldn't find landscape asset");
 
+                println!("Add rockmap texture...");
+
                 handle_add_landscape_texture(
                     renderer_state.clone(),
                     &gpu_resources.device,
@@ -1166,6 +1168,8 @@ pub fn restore_renderer_from_saved(
                             .expect("Couldn't get soil id")
                     })
                     .expect("Couldn't find landscape asset");
+
+                println!("Add soil texture...");
 
                 handle_add_landscape_texture(
                     renderer_state.clone(),

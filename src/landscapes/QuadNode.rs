@@ -656,6 +656,8 @@ impl QuadNode {
         let terrain_width = (height_data.len() as f32).sqrt() as f32;
         let terrain_half_width = terrain_width / 2.0;
 
+        // println!("terrain_width {:?} {:?}", height_data.len(), terrain_width);
+
         let camera = get_camera();
         // println!("create mesh, cam pos: {:?}", camera.position);
 
@@ -680,6 +682,9 @@ impl QuadNode {
             // Sample point to the left of our quad
             let left_x = bounds.x - sample_distance;
             let left_height = sample_height_world(left_x, z, height_data);
+
+            // println!("test sample height {:?} {:?} {:?}", left_x, z, left_height);
+
             potential_overlaps.push(VertexInfo {
                 vertex: Vertex {
                     position: [left_x, left_height, z],
@@ -1035,6 +1040,18 @@ impl QuadNode {
                 merged_vertex_info.push(vertex.clone());
             }
         }
+
+        // for i in 0..3 {
+        //     println!(
+        //         "Landscape vertex tex_coords {:?} {:?}",
+        //         i,
+        //         merged_vertex_info
+        //             .get(i)
+        //             .expect("Couldn't get vertex")
+        //             .vertex
+        //             .tex_coords
+        //     );
+        // }
 
         let vertices: Vec<Vertex> = merged_vertex_info
             .iter_mut()
