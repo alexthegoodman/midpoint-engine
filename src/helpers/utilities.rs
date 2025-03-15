@@ -19,6 +19,17 @@ pub fn get_common_os_dir() -> Option<PathBuf> {
     })
 }
 
+pub fn get_projects_dir() -> Option<PathBuf> {
+    let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
+    let projects_dir = sync_dir.join("midpoint/projects");
+
+    fs::create_dir_all(&projects_dir)
+        .ok()
+        .expect("Couldn't check or create Projects directory");
+
+    Some(projects_dir)
+}
+
 pub fn get_project_dir(project_id: &str) -> Option<PathBuf> {
     let sync_dir = get_common_os_dir().expect("Couldn't get CommonOS directory");
     let project_dir = sync_dir.join("midpoint/projects").join(project_id);
